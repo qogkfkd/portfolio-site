@@ -11,6 +11,7 @@ WHERE id = 1;
 
 DELETE FROM files WHERE work_id LIKE 'seed-%';
 DELETE FROM works WHERE id LIKE 'seed-%';
+DELETE FROM works WHERE title LIKE '스모크%';
 
 INSERT INTO works (id, slug, title, summary, description_html, fields_json, techs_json, links_json, competition, organizer, participated_on, period_start, period_end, award, team_type, team_size, role, is_public, is_featured, created_at, updated_at) VALUES
 ('seed-1', '캠퍼스-분실물-지도', '캠퍼스 분실물 지도', '잃어버린 물건을 지도에서 바로 찾는 학교 서비스',
