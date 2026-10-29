@@ -1,0 +1,44 @@
+---
+import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+  image?: string | null;
+  noindex?: boolean;
+  ownerName?: string | null;
+}
+
+const { title, description, image = null, noindex = false, ownerName = null } = Astro.props;
+const imageUrl = image ? new URL(image, Astro.url).href : null;
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={Astro.url.href} />
+    {imageUrl && <meta property="og:image" content={imageUrl} />}
+    <meta name="twitter:card" content={imageUrl ? "summary_large_image" : "summary"} />
+  </head>
+  <body>
+    <slot />
+    {
+      ownerName && (
+        <footer class="site-footer">
+          <div class="container">© {year} {ownerName}</div>
+        </footer>
+      )
+    }
+  </body>
+</html>

@@ -1,0 +1,37 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+---
+
+<BaseLayout title="문제가 생겼어요" description="잠시 후 다시 시도해 주세요." noindex>
+  <main class="container status">
+    <p class="code">500</p>
+    <h1>문제가 생겼어요</h1>
+    <p class="desc">잠시 후 다시 시도해 주세요.</p>
+    <a class="btn btn-primary" href="/">홈으로 가기</a>
+  </main>
+</BaseLayout>
+
+<style>
+  .status {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    padding-top: 120px;
+    padding-bottom: 120px;
+    text-align: center;
+  }
+  .code {
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+  h1 {
+    font-size: clamp(26px, 5vw, 36px);
+    font-weight: 800;
+  }
+  .desc {
+    margin-bottom: 12px;
+    color: var(--muted);
+  }
+</style>
