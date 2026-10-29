@@ -1,0 +1,4 @@
+# 로컬 개발 전용 값이다. 운영에는 쓰지 않는다.
+# 복사해서 .dev.vars로 쓴다. 로컬 관리자 비밀번호: portfolio-dev-password
+ADMIN_PASSWORD_HASH="pbkdf2:100000:Q6+mSERdymGzCc4YBZ8I+g==:wTElMR74HgmhQ84AQQMF+tnE05xVlc1SIXsI1jG5wJk="
+SESSION_SECRET="19cb371c6f162902eb3ea81fd2c42363e3f94748a8ce42792e879a34a0df2587"
