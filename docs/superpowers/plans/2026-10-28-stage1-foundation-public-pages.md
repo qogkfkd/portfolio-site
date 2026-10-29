@@ -2860,3 +2860,15 @@ git commit -m "docs: add stage 1 handoff"
 3. **저장소 밖 기본 경로 쓰기가 막히면** 첫 실행 때처럼 그 명령에서만 `npm_config_cache`와 `WRANGLER_LOG_PATH`를 시스템 임시 폴더로 지정해도 된다. 프로젝트 파일은 바꾸지 않는다.
 4. **작업 9 Step 2의 포트 확인 명령이 거부되면** "미실행(환경 거부)"로 적고 넘어간다. Claude가 리뷰 때 확인한다.
 5. **작업 9 Step 3:** `collab/HANDOFF.md`를 처음부터 다시 쓴다. 첫 실행(작업 1에서 멈춤)과 이번 실행을 모두 요약한다. 수정·새 파일 목록은 `git status --short --untracked-files=all` 결과로 적는다. 작업 9 Step 4(커밋)는 실행하지 않는다.
+
+## 수정 작업 2 (2026-10-29, 사용자 승인)
+
+**이유:** 샌드박스 안에서는 개발 서버가 뜨지 않는다. 저장소 밖 `AppData\Roaming\xdg.config\cloudflare\dev-registry` 폴더 생성이 거부되고(EPERM), 실행기 잠금 파일 감시가 실패한다(EBUSY). 코드 문제가 아니다.
+
+**바뀐 점(수정 작업 1도 그대로 유지한다):**
+
+1. **작업 8 Step 2부터 시작한다.** 작업 2~7은 Claude가 다시 검증하고 커밋했다(`1adcb91`~`3d34918`). 작업 7의 화면 점검은 샌드박스 밖에서 계획대로 `smoke: 14 passed, 6 failed`가 나왔다.
+2. **`npm run smoke`와 `npm run dev`는 실행하지 않는다.** 작업 8 Step 1, 작업 8 Step 3의 smoke, 작업 9 Step 1의 smoke, 작업 9 Step 2 포트 확인이 해당한다. 화면 점검과 실제 화면 확인은 Claude가 리뷰 때 샌드박스 밖에서 한다. HANDOFF에는 "Claude 리뷰에서 실행"으로 적는다.
+3. **작업 8 Step 3**은 `npm run check`만 실행한다. 기대 결과는 `0 errors`.
+4. **작업 9 Step 1**은 `npm test`(51개 통과), `npm run check`(`0 errors`), `npm run build`(`Complete!`)만 실행한다.
+5. **작업 9 Step 3**은 `collab/HANDOFF.md`를 처음부터 다시 쓴다. 세 번의 실행(작업 1에서 멈춤, 작업 7에서 멈춤, 이번)을 모두 요약한다. 커밋은 하지 않는다.
