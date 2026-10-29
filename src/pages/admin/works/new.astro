@@ -1,0 +1,13 @@
+---
+import { env } from "cloudflare:workers";
+import WorkForm from "../../../components/admin/WorkForm";
+import AdminLayout from "../../../layouts/AdminLayout.astro";
+import { listTagSuggestions } from "../../../lib/db/adminWorks";
+import { EMPTY_WORK_INPUT } from "../../../lib/validate/work";
+
+const suggestions = await listTagSuggestions(env.DB);
+---
+
+<AdminLayout title="새 작품" current="works">
+  <WorkForm client:only="react" mode="create" workId={null} initial={EMPTY_WORK_INPUT} suggestions={suggestions} />
+</AdminLayout>

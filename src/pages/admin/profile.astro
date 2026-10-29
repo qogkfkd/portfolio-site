@@ -1,0 +1,13 @@
+---
+import { env } from "cloudflare:workers";
+import ProfileForm from "../../components/admin/ProfileForm";
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getProfile } from "../../lib/db/profile";
+import { profileToInput } from "../../lib/validate/profile";
+
+const profile = await getProfile(env.DB);
+---
+
+<AdminLayout title="자기소개" current="profile">
+  <ProfileForm client:only="react" initial={profileToInput(profile)} />
+</AdminLayout>

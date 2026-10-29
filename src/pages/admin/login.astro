@@ -1,0 +1,59 @@
+---
+import { env } from "cloudflare:workers";
+import "../../styles/admin.css";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { clearFailures, getLockStatus, recordFailure } from "../../lib/auth/lockout";
+import { verifyPassword } from "../../lib/auth/password";
+import { clientIp } from "../../lib/auth/request";
+import { SESSION_COOKIE, SESSION_MAX_AGE_SECONDS, createSessionToken } from "../../lib/auth/session";
+
+if (Astro.locals.isAdmin) {
+  return Astro.redirect("/admin");
+}
+
+const LOCKED_MESSAGE = "로그인을 너무 많이 시도했어요. 15분 뒤에 다시 시도해 주세요.";
+let error: string | null = null;
+
+if (Astro.request.method === "POST") {
+  const now = new Date();
+  const ip = clientIp(Astro.request);
+  const form = await Astro.request.formData();
+  const password = String(form.get("password") ?? "");
+  if (!env.ADMIN_PASSWORD_HASH || !env.SESSION_SECRET) {
+    error = "관리자 비밀번호가 아직 설정되지 않았어요.";
+    Astro.response.status = 500;
+  } else if ((await getLockStatus(env.DB, ip, now)).locked) {
+    error = LOCKED_MESSAGE;
+    Astro.response.status = 429;
+  } else if (await verifyPassword(password, env.ADMIN_PASSWORD_HASH)) {
+    await clearFailures(env.DB, ip);
+    Astro.cookies.set(SESSION_COOKIE, await createSessionToken(env.SESSION_SECRET, now.getTime()), {
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+      path: "/",
+      maxAge: SESSION_MAX_AGE_SECONDS,
+    });
+    return Astro.redirect("/admin", 303);
+  } else {
+    const status = await recordFailure(env.DB, ip, now);
+    error = status.locked ? LOCKED_MESSAGE : "비밀번호가 맞지 않아요.";
+    Astro.response.status = status.locked ? 429 : 401;
+  }
+}
+---
+
+<BaseLayout title="관리자 로그인" description="포트폴리오 관리자 로그인" noindex>
+  <main class="login">
+    <form class="login-card" method="post">
+      <h1>관리자 로그인</h1>
+      <p class="admin-muted">사이트 주인만 들어올 수 있어요.</p>
+      <label class="field">
+        <span class="field-label">비밀번호</span>
+        <input type="password" name="password" autocomplete="current-password" required autofocus />
+      </label>
+      {error && <p class="alert alert-error" role="alert">{error}</p>}
+      <button class="btn btn-primary btn-block" type="submit">로그인</button>
+    </form>
+  </main>
+</BaseLayout>

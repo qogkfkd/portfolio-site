@@ -1,0 +1,31 @@
+---
+import { env } from "cloudflare:workers";
+import WorkForm from "../../../../components/admin/WorkForm";
+import AdminLayout from "../../../../layouts/AdminLayout.astro";
+import { getWorkById, listTagSuggestions } from "../../../../lib/db/adminWorks";
+import { workToInput } from "../../../../lib/validate/work";
+
+const work = await getWorkById(env.DB, Astro.params.id ?? "");
+if (!work) {
+  return Astro.rewrite("/404");
+}
+const suggestions = await listTagSuggestions(env.DB);
+const saved = Astro.url.searchParams.get("saved") === "1";
+const workUrl = `/works/${encodeURIComponent(work.slug)}`;
+---
+
+<AdminLayout title="작품 수정" current="works">
+  <p class="admin-muted" style="margin-bottom: 20px">
+    {work.isPublic ? "공개" : "비공개"}{work.isFeatured ? " · 대표작" : ""}{" · "}<a href={workUrl} target="_blank" rel="noopener"
+      >{work.isPublic ? "사이트에서 보기" : "미리보기"}</a
+    >
+  </p>
+  <WorkForm
+    client:only="react"
+    mode="edit"
+    workId={work.id}
+    initial={workToInput(work)}
+    suggestions={suggestions}
+    savedNotice={saved}
+  />
+</AdminLayout>

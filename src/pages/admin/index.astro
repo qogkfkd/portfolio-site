@@ -1,0 +1,71 @@
+---
+import { env } from "cloudflare:workers";
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { countFilesByWork, listAllWorks } from "../../lib/db/adminWorks";
+import { formatDate } from "../../lib/format";
+import { sortDateOf } from "../../lib/works/sort";
+
+const [works, fileCounts] = await Promise.all([listAllWorks(env.DB), countFilesByWork(env.DB)]);
+const publicCount = works.filter((work) => work.isPublic).length;
+const deleted = Astro.url.searchParams.get("deleted") === "1";
+---
+
+<AdminLayout title="작품" current="works">
+  <div class="admin-toolbar">
+    <p class="admin-muted">작품 {works.length}개 · 공개 {publicCount}개</p>
+    <a class="btn btn-primary" href="/admin/works/new">새 작품</a>
+  </div>
+  {deleted && <p class="alert alert-success" role="status">작품을 삭제했어요.</p>}
+  {
+    works.length === 0 ? (
+      <div class="admin-empty">아직 작품이 없어요. 첫 작품을 올려 보세요.</div>
+    ) : (
+      <ul class="work-list">
+        {works.map((work) => (
+          <li class="work-row" data-work-id={work.id}>
+            <div>
+              <a class="work-row-title" href={`/admin/works/${work.id}/edit`}>{work.title}</a>
+              <div class="work-row-meta">
+                <span class:list={["status", work.isPublic ? "status-public" : "status-private"]}>
+                  {work.isPublic ? "공개" : "비공개"}
+                </span>
+                {work.isFeatured && <span class="status status-featured">대표작</span>}
+                <span>{formatDate(sortDateOf(work))}</span>
+                <span>{work.fields.join(", ")}</span>
+              </div>
+            </div>
+            <div class="work-row-actions">
+              <form method="post" action={`/api/admin/works/${work.id}/flags`}>
+                <input type="hidden" name="isPublic" value={work.isPublic ? "0" : "1"} />
+                <button class="btn btn-small" type="submit">{work.isPublic ? "비공개로" : "공개하기"}</button>
+              </form>
+              <form method="post" action={`/api/admin/works/${work.id}/flags`}>
+                <input type="hidden" name="isFeatured" value={work.isFeatured ? "0" : "1"} />
+                <button class="btn btn-small" type="submit">{work.isFeatured ? "대표작 해제" : "대표작으로"}</button>
+              </form>
+              <a class="btn btn-small" href={`/works/${encodeURIComponent(work.slug)}`} target="_blank" rel="noopener">
+                보기
+              </a>
+              <a class="btn btn-small" href={`/admin/works/${work.id}/edit`}>수정</a>
+              <form
+                method="post"
+                action={`/api/admin/works/${work.id}/delete`}
+                data-confirm={`'${work.title}'을(를) 삭제할까요? 함께 지워지는 파일 ${fileCounts.get(work.id) ?? 0}개. 되돌릴 수 없어요.`}
+              >
+                <button class="btn btn-small btn-danger" type="submit">삭제</button>
+              </form>
+            </div>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</AdminLayout>
+
+<script>
+  for (const form of document.querySelectorAll<HTMLFormElement>("form[data-confirm]")) {
+    form.addEventListener("submit", (event) => {
+      if (!window.confirm(form.dataset.confirm ?? "")) event.preventDefault();
+    });
+  }
+</script>

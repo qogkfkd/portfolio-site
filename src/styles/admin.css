@@ -1,0 +1,502 @@
+/* 관리자 화면 전용 스타일. React 폼도 이 클래스를 쓴다. */
+.admin-container {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.admin-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+}
+
+.admin-bar-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  min-height: 60px;
+}
+
+.admin-brand {
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.admin-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-nav a,
+.admin-nav-button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.admin-nav a:hover,
+.admin-nav-button:hover,
+.admin-nav a[aria-current="page"] {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.admin-main {
+  padding-top: 36px;
+  padding-bottom: 96px;
+}
+
+.admin-title {
+  margin-bottom: 20px;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.admin-muted {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.admin-empty {
+  padding: 48px 20px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+}
+
+.btn-small {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.btn-danger {
+  border-color: #f3c4c4;
+  color: #b42318;
+}
+
+.btn-danger:hover {
+  border-color: #b42318;
+}
+
+.btn-block {
+  justify-content: center;
+  width: 100%;
+}
+
+.btn:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.alert {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+}
+
+.alert-success {
+  background: #edf8f1;
+  color: #157a3c;
+}
+
+.alert-error {
+  background: #fdecec;
+  color: #b42318;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-public {
+  background: #edf8f1;
+  color: #157a3c;
+}
+
+.status-private {
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.status-featured {
+  background: #eef1fd;
+  color: #2340b0;
+}
+
+.work-list {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.work-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.work-row-title {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.work-row-title:hover {
+  text-decoration: underline;
+}
+
+.work-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.work-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.work-row-actions form {
+  margin: 0;
+}
+
+.form-section {
+  margin-bottom: 28px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.form-section h2 {
+  margin-bottom: 16px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 0 16px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.field-required {
+  margin-left: 4px;
+  color: #b42318;
+}
+
+.field input[type="text"],
+.field input[type="url"],
+.field input[type="email"],
+.field input[type="date"],
+.field input[type="number"],
+.field input[type="password"],
+.field select,
+.field textarea,
+.tag-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #d3d7de;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.field [aria-invalid="true"],
+.tag-input[aria-invalid="true"],
+.editor[aria-invalid="true"] {
+  border-color: #b42318;
+}
+
+.field-help {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.field-error {
+  margin-top: 6px;
+  color: #b42318;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  min-height: 44px;
+  align-items: center;
+}
+
+.choice-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+}
+
+.tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.field .tag-input input[type="text"] {
+  flex: 1;
+  min-width: 140px;
+  min-height: 0;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  outline: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chip button {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chip button:hover {
+  background: #e4e7ec;
+  color: var(--ink);
+}
+
+.link-rows {
+  display: grid;
+  gap: 10px;
+}
+
+.link-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1.6fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.link-row.no-kind {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto;
+}
+
+.link-row .field-error {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .link-row,
+  .link-row.no-kind {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editor {
+  overflow: hidden;
+  border: 1px solid #d3d7de;
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.editor-toolbar button {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--body);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.editor-toolbar button:hover {
+  background: #e4e7ec;
+}
+
+.editor-toolbar button[aria-pressed="true"] {
+  background: var(--ink);
+  color: #fff;
+}
+
+.editor-content {
+  min-height: 240px;
+  padding: 14px 16px;
+  outline: none;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.editor-content > * + * {
+  margin-top: 10px;
+}
+
+.editor-content h2 {
+  font-size: 21px;
+}
+
+.editor-content h3 {
+  font-size: 18px;
+}
+
+.editor-content p {
+  margin: 0;
+}
+
+.editor-content ul,
+.editor-content ol {
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.editor-content blockquote {
+  margin: 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+.editor-content pre {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 14px;
+}
+
+.editor-content a {
+  color: var(--accent);
+}
+
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.login {
+  display: grid;
+  min-height: 100vh;
+  padding: 20px;
+  place-items: center;
+  background: var(--surface);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  padding: 32px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.login-card h1 {
+  margin-bottom: 6px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.login-card .admin-muted {
+  margin-bottom: 24px;
+}
