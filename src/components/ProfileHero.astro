@@ -1,0 +1,84 @@
+---
+import type { Profile } from "../lib/types";
+
+interface Props {
+  profile: Profile;
+}
+
+const { profile } = Astro.props;
+const hasContacts = profile.email !== null || profile.githubUrl !== null || profile.links.length > 0;
+---
+
+<header class="hero">
+  <div class="container">
+    <p class="eyebrow">Portfolio</p>
+    <h1>{profile.name}</h1>
+    {profile.headline && <p class="headline">{profile.headline}</p>}
+    {profile.bio && <p class="bio">{profile.bio}</p>}
+    {
+      hasContacts && (
+        <ul class="contacts">
+          {profile.email && (
+            <li>
+              <a class="btn btn-primary" href={`mailto:${profile.email}`}>이메일</a>
+            </li>
+          )}
+          {profile.githubUrl && (
+            <li>
+              <a class="btn" href={profile.githubUrl} target="_blank" rel="noopener noreferrer">GitHub</a>
+            </li>
+          )}
+          {profile.links.map((link) => (
+            <li>
+              <a class="btn" href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </div>
+</header>
+
+<style>
+  .hero {
+    padding: 96px 0 24px;
+  }
+  .eyebrow {
+    margin-bottom: 16px;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: clamp(36px, 7vw, 60px);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+  }
+  .headline {
+    max-width: 34em;
+    margin-top: 16px;
+    color: var(--ink);
+    font-size: clamp(19px, 2.6vw, 24px);
+    font-weight: 600;
+  }
+  .bio {
+    max-width: 40em;
+    margin-top: 12px;
+    white-space: pre-line;
+  }
+  .contacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 28px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (max-width: 640px) {
+    .hero {
+      padding-top: 64px;
+    }
+  }
+</style>

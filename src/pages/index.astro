@@ -1,12 +1,90 @@
 ---
+import { env } from "cloudflare:workers";
+import EmptyState from "../components/EmptyState.astro";
+import FilterBar from "../components/FilterBar.astro";
+import ProfileHero from "../components/ProfileHero.astro";
+import WorkCard from "../components/WorkCard.astro";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { getProfile } from "../lib/db/profile";
+import { listPublicWorks } from "../lib/db/works";
+import { applyFilters, emptyStateMessage, filterOptions, hasActiveFilters, parseFilters } from "../lib/works/filter";
+
+const [profile, works] = await Promise.all([getProfile(env.DB), listPublicWorks(env.DB)]);
+const filters = parseFilters(Astro.url.searchParams);
+const featured = works.filter((work) => work.isFeatured);
+const visible = applyFilters(works, filters);
+const options = filterOptions(works);
+const description = profile.headline ?? `${profile.name}의 작업과 수상 기록을 모은 포트폴리오`;
 ---
 
-<html lang="ko">
-  <head>
-    <meta charset="utf-8" />
-    <title>준비 중</title>
-  </head>
-  <body>
-    <p>준비 중</p>
-  </body>
-</html>
+<BaseLayout title={`${profile.name} | 포트폴리오`} description={description} ownerName={profile.name}>
+  <ProfileHero profile={profile} />
+  <main>
+    {
+      featured.length > 0 && (
+        <section class="section container" aria-labelledby="featured-title">
+          <h2 id="featured-title" class="section-title">대표작</h2>
+          <div class="grid grid-featured">
+            {featured.map((work) => (
+              <WorkCard work={work} list="featured" />
+            ))}
+          </div>
+        </section>
+      )
+    }
+    <section id="works" class="section container" aria-labelledby="works-title">
+      <div class="section-head">
+        <h2 id="works-title" class="section-title">전체 작품 <span class="count">{visible.length}</span></h2>
+        {works.length > 0 && <FilterBar filters={filters} fields={options.fields} years={options.years} />}
+      </div>
+      {
+        visible.length > 0 ? (
+          <div class="grid">
+            {visible.map((work) => (
+              <WorkCard work={work} list="all" />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            message={emptyStateMessage(works.length, filters)}
+            showReset={works.length > 0 && hasActiveFilters(filters)}
+          />
+        )
+      }
+    </section>
+  </main>
+</BaseLayout>
+
+<style>
+  .section {
+    margin-top: 72px;
+  }
+  .section-title {
+    font-size: 24px;
+    font-weight: 800;
+  }
+  .section > .section-title {
+    margin-bottom: 24px;
+  }
+  .section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .count {
+    margin-left: 4px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    gap: 20px;
+  }
+  .grid-featured {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  }
+</style>

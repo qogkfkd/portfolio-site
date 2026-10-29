@@ -1,0 +1,26 @@
+---
+interface Props {
+  message: string;
+  showReset: boolean;
+}
+
+const { message, showReset } = Astro.props;
+---
+
+<div class="empty">
+  <p>{message}</p>
+  {showReset && <a class="btn" href="/#works">조건 지우기</a>}
+</div>
+
+<style>
+  .empty {
+    display: grid;
+    justify-items: center;
+    gap: 16px;
+    padding: 56px 20px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    color: var(--muted);
+    text-align: center;
+  }
+</style>

@@ -1,0 +1,85 @@
+---
+import type { WorkFilters } from "../lib/types";
+import { hasActiveFilters } from "../lib/works/filter";
+
+interface Props {
+  filters: WorkFilters;
+  fields: string[];
+  years: number[];
+}
+
+const { filters, fields, years } = Astro.props;
+---
+
+<form class="filters" method="get" action="/#works" data-filter-form>
+  <label>
+    <span class="visually-hidden">분야</span>
+    <select name="field">
+      <option value="">모든 분야</option>
+      {fields.map((field) => <option value={field} selected={filters.field === field}>{field}</option>)}
+    </select>
+  </label>
+  <label>
+    <span class="visually-hidden">연도</span>
+    <select name="year">
+      <option value="">모든 연도</option>
+      {years.map((year) => <option value={String(year)} selected={filters.year === year}>{year}년</option>)}
+    </select>
+  </label>
+  <label class="check">
+    <input type="checkbox" name="award" value="1" checked={filters.award} />
+    <span>수상작만</span>
+  </label>
+  <button class="btn" type="submit">적용</button>
+  {hasActiveFilters(filters) && <a class="reset" href="/#works">조건 지우기</a>}
+</form>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("[data-filter-form]");
+  form?.addEventListener("change", () => form.requestSubmit());
+</script>
+
+<style>
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  select {
+    height: 40px;
+    padding: 0 36px 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #fff
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.6'/%3E%3C/svg%3E")
+      no-repeat right 14px center / 12px;
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    cursor: pointer;
+    appearance: none;
+  }
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink);
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .check input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--ink);
+  }
+  .reset {
+    color: var(--muted);
+    font-size: 14px;
+  }
+</style>
