@@ -4131,3 +4131,591 @@ Expected: `Complete!`
 | 5 | `feat: show cover, gallery, attachments and avatar` |
 | 6 | `feat: add admin file manager with image resizing` |
 | 7 | `test: add file checks to smoke and stage 3 handoff` |
+
+---
+
+## 수정 작업 1 (2026-10-30, 사용자 승인)
+
+**이유:** 첫 실행에서 Codex가 작업 2의 계획 코드에 동시 업로드 경쟁 문제가 있음을 찾고 멈췄다.
+- **경쟁 문제:** `startUpload`가 사용량을 읽고(`storageUsage`) 확인한 뒤, 따로 기록을 넣는다(`insertFile`). 사용량이 9.4GB일 때 100MB 업로드 두 개가 동시에 시작하면 둘 다 확인을 통과해 합계가 9.6GB가 된다(상한 9.5GB).
+- **같이 고친 빈틈:** 완료할 때 실제 크기를 1GB 상한하고만 비교했다. 시작할 때 크기를 작게 알리고 더 큰 파일을 올리면 용량 상한을 피할 수 있었다.
+
+**고친 방법:**
+- **원자적 예약:** 사용량 확인, 순서 번호 계산, 기록 저장을 SQL 한 문장(`INSERT … SELECT … WHERE 합계 + 크기 <= 상한`)으로 묶었다. 새 함수는 `reserveFile`이다. D1은 한 문장을 한 번에 처리하므로, 동시에 시작해도 상한을 넘지 않는다.
+- **업로드 순서:** 기록을 먼저 예약하고(`upload_id`는 비움), R2 멀티파트를 연 뒤 `setUploadId`로 업로드 번호를 채운다. 멀티파트를 열다 실패하면 예약한 기록을 지운다.
+- **완료 확인:** 완료할 때 실제 크기(원본 + 썸네일)가 처음 알린 크기보다 크면 파일을 지우고 거절한다. 관리자 화면(`upload.ts`)은 이미 원본과 썸네일 크기를 합쳐 알리므로 바꿀 것이 없다.
+
+**바뀐 점(아래 내용이 앞의 작업 설명보다 우선한다):**
+
+1. **작업 2 Step 1부터 시작한다.** 작업 1은 Claude가 다시 검증하고 커밋했다(`7445d92`). 작업 1 파일은 다시 만들지 않는다.
+2. **작업 2의 세 파일은 앞의 코드 대신 이 절의 코드를 그대로 쓴다.**
+   - Step 1: `test/files/uploads.test.ts`(아래 코드). `test/helpers/files.ts`는 앞의 코드 그대로다.
+   - Step 3: `src/lib/db/files.ts`, `src/lib/files/uploads.ts`(아래 코드)
+3. **작업 2의 Interfaces가 바뀐다.** `db/files.ts`에서 `nextSortOrder`를 뺐다. 대신 두 함수를 더했다.
+   - `reserveFile(db, file, limitBytes): Promise<boolean>`: 상한을 넘으면 아무것도 넣지 않고 `false`를 돌려준다.
+   - `setUploadId(db, id, uploadId)`
+4. **기대 테스트 수가 바뀐다.** 업로드 테스트가 2개 늘었다(동시 시작, 알린 크기 초과).
+   - 작업 2 Step 4: `Tests  13 passed (13)`
+   - 작업 3 마지막 단계, 작업 7 Step 2, 실행 계약 완료 기준: `Test Files  24 passed (24)`, `Tests  134 passed (134)`
+   - smoke는 그대로 `smoke: 59 passed, 0 failed`다.
+5. **작업 7 Step 3:** `collab/HANDOFF.md`를 처음부터 다시 쓴다. 첫 실행(작업 2에서 멈춤)과 이번 실행을 모두 요약한다. 커밋은 하지 않는다.
+
+**Claude 사전 검증:** 이 절의 코드를 반영한 복제본에서 다음을 확인했다.
+- `npm test` 24개 파일, 134개 통과(세 번 반복)
+- `npm run check` `0 errors`, `0 warnings`, `0 hints`
+- `npm run build` `Complete!`
+- `smoke: 59 passed, 0 failed`
+- 실제 브라우저 업로드 확인 15개 통과
+
+`src/lib/db/files.ts`
+```ts
+import type { FileKind, FileRecord, FileStatus } from "../files/types";
+
+interface FileRow {
+  id: string;
+  work_id: string | null;
+  kind: string;
+  r2_key: string;
+  thumb_r2_key: string | null;
+  original_name: string;
+  relative_path: string;
+  content_type: string;
+  size_bytes: number;
+  sort_order: number;
+  status: string;
+  upload_id: string | null;
+  created_at: string;
+}
+
+function rowToFile(row: FileRow): FileRecord {
+  return {
+    id: row.id,
+    workId: row.work_id,
+    kind: row.kind as FileKind,
+    r2Key: row.r2_key,
+    thumbR2Key: row.thumb_r2_key,
+    originalName: row.original_name,
+    relativePath: row.relative_path,
+    contentType: row.content_type,
+    sizeBytes: row.size_bytes,
+    sortOrder: row.sort_order,
+    status: row.status as FileStatus,
+    uploadId: row.upload_id,
+    createdAt: row.created_at,
+  };
+}
+
+const ORDER = "ORDER BY kind, sort_order, relative_path, original_name";
+
+export async function getFile(db: D1Database, id: string): Promise<FileRecord | null> {
+  const row = await db.prepare("SELECT * FROM files WHERE id = ?").bind(id).first<FileRow>();
+  return row ? rowToFile(row) : null;
+}
+
+export async function listWorkFiles(db: D1Database, workId: string): Promise<FileRecord[]> {
+  const { results } = await db
+    .prepare(`SELECT * FROM files WHERE work_id = ? AND status = 'complete' ${ORDER}`)
+    .bind(workId)
+    .all<FileRow>();
+  return results.map(rowToFile);
+}
+
+export async function listAllWorkFiles(db: D1Database, workId: string): Promise<FileRecord[]> {
+  const { results } = await db.prepare("SELECT * FROM files WHERE work_id = ?").bind(workId).all<FileRow>();
+  return results.map(rowToFile);
+}
+
+export async function listCoversByWork(db: D1Database): Promise<Map<string, FileRecord>> {
+  const { results } = await db
+    .prepare("SELECT * FROM files WHERE kind = 'cover' AND status = 'complete' AND work_id IS NOT NULL")
+    .all<FileRow>();
+  return new Map(results.map((row) => [row.work_id as string, rowToFile(row)]));
+}
+
+export async function getAvatar(db: D1Database): Promise<FileRecord | null> {
+  const row = await db
+    .prepare("SELECT * FROM files WHERE kind = 'avatar' AND status = 'complete' ORDER BY created_at DESC LIMIT 1")
+    .first<FileRow>();
+  return row ? rowToFile(row) : null;
+}
+
+export async function storageUsage(db: D1Database): Promise<number> {
+  const row = await db.prepare("SELECT COALESCE(SUM(size_bytes), 0) AS total FROM files").first<{ total: number }>();
+  return row?.total ?? 0;
+}
+
+export async function insertFile(db: D1Database, file: FileRecord): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO files (id, work_id, kind, r2_key, thumb_r2_key, original_name, relative_path, content_type, size_bytes, sort_order, status, upload_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      file.id,
+      file.workId,
+      file.kind,
+      file.r2Key,
+      file.thumbR2Key,
+      file.originalName,
+      file.relativePath,
+      file.contentType,
+      file.sizeBytes,
+      file.sortOrder,
+      file.status,
+      file.uploadId,
+      file.createdAt,
+    )
+    .run();
+}
+
+// 사용량 확인, 순서 번호, 기록 저장을 한 문장으로 한다. 동시에 여러 개를 올려도 상한을 넘지 않는다.
+// 상한을 넘으면 아무것도 넣지 않고 false를 돌려준다.
+export async function reserveFile(
+  db: D1Database,
+  file: Omit<FileRecord, "sortOrder" | "uploadId" | "status">,
+  limitBytes: number,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `INSERT INTO files (id, work_id, kind, r2_key, thumb_r2_key, original_name, relative_path, content_type, size_bytes, sort_order, status, upload_id, created_at)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?,
+         (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM files WHERE work_id IS ? AND kind = ?),
+         'uploading', NULL, ?
+       WHERE (SELECT COALESCE(SUM(size_bytes), 0) FROM files) + ? <= ?`,
+    )
+    .bind(
+      file.id,
+      file.workId,
+      file.kind,
+      file.r2Key,
+      file.thumbR2Key,
+      file.originalName,
+      file.relativePath,
+      file.contentType,
+      file.sizeBytes,
+      file.workId,
+      file.kind,
+      file.createdAt,
+      file.sizeBytes,
+      limitBytes,
+    )
+    .run();
+  return result.meta.changes === 1;
+}
+
+export async function setUploadId(db: D1Database, id: string, uploadId: string): Promise<void> {
+  await db.prepare("UPDATE files SET upload_id = ? WHERE id = ?").bind(uploadId, id).run();
+}
+
+export async function setThumbKey(db: D1Database, id: string, thumbKey: string): Promise<void> {
+  await db.prepare("UPDATE files SET thumb_r2_key = ? WHERE id = ?").bind(thumbKey, id).run();
+}
+
+export async function markComplete(db: D1Database, id: string, sizeBytes: number, thumbKey: string | null): Promise<void> {
+  await db
+    .prepare("UPDATE files SET status = 'complete', upload_id = NULL, size_bytes = ?, thumb_r2_key = ? WHERE id = ?")
+    .bind(sizeBytes, thumbKey, id)
+    .run();
+}
+
+export async function deleteFileRows(db: D1Database, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.batch(ids.map((id) => db.prepare("DELETE FROM files WHERE id = ?").bind(id)));
+}
+
+export async function listOtherSingles(db: D1Database, file: FileRecord): Promise<FileRecord[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM files WHERE kind = ? AND work_id IS ? AND id != ? AND status = 'complete'")
+    .bind(file.kind, file.workId, file.id)
+    .all<FileRow>();
+  return results.map(rowToFile);
+}
+
+export async function listStaleUploads(db: D1Database, before: string): Promise<FileRecord[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM files WHERE status = 'uploading' AND created_at < ?")
+    .bind(before)
+    .all<FileRow>();
+  return results.map(rowToFile);
+}
+
+export async function swapSortOrder(db: D1Database, a: FileRecord, b: FileRecord): Promise<void> {
+  await db.batch([
+    db.prepare("UPDATE files SET sort_order = ? WHERE id = ?").bind(b.sortOrder, a.id),
+    db.prepare("UPDATE files SET sort_order = ? WHERE id = ?").bind(a.sortOrder, b.id),
+  ]);
+}
+```
+
+`src/lib/files/uploads.ts`
+```ts
+import { deleteWork, getWorkById } from "../db/adminWorks";
+import * as files from "../db/files";
+import {
+  IMAGE_TYPES,
+  MAX_FILE_BYTES,
+  PART_SIZE,
+  STORAGE_LIMIT_BYTES,
+  THUMB_MAX_BYTES,
+  cleanContentType,
+  isImageKind,
+  storageFullMessage,
+  validateUploadStart,
+} from "./rules";
+import { toFileView, type FileRecord, type FileView } from "./types";
+
+export type UploadResult<T> = { ok: true; value: T } | { ok: false; status: 400 | 404; errors: Record<string, string> };
+
+const NOT_FOUND = { ok: false, status: 404, errors: { file: "파일을 찾을 수 없어요." } } as const;
+const fail = (message: string) => ({ ok: false, status: 400, errors: { file: message } }) as const;
+const done = <T>(value: T) => ({ ok: true, value }) as const;
+
+function objectKey(workId: string | null, fileId: string): string {
+  return workId ? `works/${workId}/${fileId}` : `profile/${fileId}`;
+}
+
+async function pendingFile(db: D1Database, id: string): Promise<(FileRecord & { uploadId: string }) | null> {
+  const file = await files.getFile(db, id);
+  return file && file.status === "uploading" && file.uploadId ? { ...file, uploadId: file.uploadId } : null;
+}
+
+function parseParts(raw: unknown): R2UploadedPart[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 10_000) return null;
+  const parts: R2UploadedPart[] = [];
+  for (const item of raw) {
+    const { partNumber, etag } = (item ?? {}) as Record<string, unknown>;
+    if (!Number.isInteger(partNumber) || (partNumber as number) < 1 || typeof etag !== "string" || etag === "") return null;
+    parts.push({ partNumber: partNumber as number, etag });
+  }
+  return parts.sort((a, b) => a.partNumber - b.partNumber);
+}
+
+export async function startUpload(
+  db: D1Database,
+  bucket: R2Bucket,
+  raw: unknown,
+  now: Date,
+): Promise<UploadResult<{ fileId: string; partSize: number }>> {
+  const check = validateUploadStart(raw);
+  if (!check.ok) return { ok: false, status: 400, errors: check.errors };
+  const start = check.value;
+  if (start.workId !== null && !(await getWorkById(db, start.workId))) {
+    return { ok: false, status: 404, errors: { file: "작품을 찾을 수 없어요." } };
+  }
+  const id = crypto.randomUUID();
+  const key = objectKey(start.workId, id);
+  const reserved = await files.reserveFile(
+    db,
+    {
+      id,
+      workId: start.workId,
+      kind: start.kind,
+      r2Key: key,
+      thumbR2Key: null,
+      originalName: start.fileName,
+      relativePath: start.relativePath,
+      contentType: start.contentType,
+      sizeBytes: start.size,
+      createdAt: now.toISOString(),
+    },
+    STORAGE_LIMIT_BYTES,
+  );
+  if (!reserved) return fail(storageFullMessage(await files.storageUsage(db)));
+  try {
+    const upload = await bucket.createMultipartUpload(key, { httpMetadata: { contentType: start.contentType } });
+    await files.setUploadId(db, id, upload.uploadId);
+  } catch (error) {
+    await files.deleteFileRows(db, [id]);
+    throw error;
+  }
+  return done({ fileId: id, partSize: PART_SIZE });
+}
+
+export async function uploadPart(
+  db: D1Database,
+  bucket: R2Bucket,
+  id: string,
+  partNumber: number,
+  body: ArrayBuffer,
+): Promise<UploadResult<R2UploadedPart>> {
+  const file = await pendingFile(db, id);
+  if (!file) return NOT_FOUND;
+  if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10_000) return fail("조각 번호가 올바르지 않아요.");
+  if (body.byteLength > PART_SIZE) return fail("조각이 너무 커요.");
+  const part = await bucket.resumeMultipartUpload(file.r2Key, file.uploadId).uploadPart(partNumber, body);
+  return done({ partNumber: part.partNumber, etag: part.etag });
+}
+
+export async function uploadThumb(
+  db: D1Database,
+  bucket: R2Bucket,
+  id: string,
+  body: ArrayBuffer,
+  contentType: string,
+): Promise<UploadResult<null>> {
+  const file = await pendingFile(db, id);
+  if (!file) return NOT_FOUND;
+  const type = cleanContentType(contentType);
+  if (!isImageKind(file.kind) || !(IMAGE_TYPES as readonly string[]).includes(type)) return fail("썸네일은 이미지에만 붙일 수 있어요.");
+  if (body.byteLength > THUMB_MAX_BYTES) return fail("썸네일이 너무 커요.");
+  const thumbKey = `${file.r2Key}.thumb`;
+  await bucket.put(thumbKey, body, { httpMetadata: { contentType: type } });
+  await files.setThumbKey(db, id, thumbKey);
+  return done(null);
+}
+
+export async function removeFile(db: D1Database, bucket: R2Bucket, file: FileRecord): Promise<void> {
+  if (file.status === "uploading" && file.uploadId) {
+    try {
+      await bucket.resumeMultipartUpload(file.r2Key, file.uploadId).abort();
+    } catch {
+      // 이미 끝났거나 사라진 업로드
+    }
+  }
+  await bucket.delete([file.r2Key, `${file.r2Key}.thumb`]);
+  await files.deleteFileRows(db, [file.id]);
+}
+
+export async function completeUpload(
+  db: D1Database,
+  bucket: R2Bucket,
+  id: string,
+  rawParts: unknown,
+): Promise<UploadResult<FileView>> {
+  const file = await pendingFile(db, id);
+  if (!file) return NOT_FOUND;
+  const parts = parseParts(rawParts);
+  if (!parts) return fail("업로드 조각 정보가 올바르지 않아요.");
+  const object = await bucket.resumeMultipartUpload(file.r2Key, file.uploadId).complete(parts);
+  let size = object.size;
+  let thumbKey = file.thumbR2Key;
+  if (thumbKey) size += (await bucket.head(thumbKey))?.size ?? 0;
+  else if (isImageKind(file.kind)) thumbKey = file.r2Key;
+  // 시작할 때 알린 크기로 용량을 예약했으므로, 실제로 더 크면 받지 않는다.
+  if (object.size > MAX_FILE_BYTES || size > file.sizeBytes) {
+    await removeFile(db, bucket, { ...file, status: "complete" });
+    return fail(object.size > MAX_FILE_BYTES ? "파일이 너무 커요. 1GB까지 올릴 수 있어요." : "올린 파일이 처음 알린 크기보다 커요. 다시 시도해 주세요.");
+  }
+  await files.markComplete(db, id, size, thumbKey);
+  if (file.kind === "cover" || file.kind === "avatar") {
+    for (const old of await files.listOtherSingles(db, file)) await removeFile(db, bucket, old);
+  }
+  return done(toFileView((await files.getFile(db, id))!));
+}
+
+export async function abortUpload(db: D1Database, bucket: R2Bucket, id: string): Promise<UploadResult<null>> {
+  const file = await files.getFile(db, id);
+  if (!file || file.status !== "uploading") return NOT_FOUND;
+  await removeFile(db, bucket, file);
+  return done(null);
+}
+
+export async function deleteFile(db: D1Database, bucket: R2Bucket, id: string): Promise<UploadResult<null>> {
+  const file = await files.getFile(db, id);
+  if (!file) return NOT_FOUND;
+  await removeFile(db, bucket, file);
+  return done(null);
+}
+
+export async function deleteWorkWithFiles(db: D1Database, bucket: R2Bucket, workId: string): Promise<boolean> {
+  for (const file of await files.listAllWorkFiles(db, workId)) await removeFile(db, bucket, file);
+  return deleteWork(db, workId);
+}
+
+export async function cleanupStaleUploads(db: D1Database, bucket: R2Bucket, now: Date): Promise<number> {
+  const before = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  const stale = await files.listStaleUploads(db, before);
+  for (const file of stale) await removeFile(db, bucket, file);
+  return stale.length;
+}
+
+export async function moveGalleryFile(db: D1Database, id: string, direction: "up" | "down"): Promise<UploadResult<null>> {
+  const file = await files.getFile(db, id);
+  if (!file || file.kind !== "gallery" || file.status !== "complete" || !file.workId) return NOT_FOUND;
+  const gallery = (await files.listWorkFiles(db, file.workId)).filter((item) => item.kind === "gallery");
+  const index = gallery.findIndex((item) => item.id === id);
+  const other = gallery[direction === "up" ? index - 1 : index + 1];
+  if (other) await files.swapSortOrder(db, file, other);
+  return done(null);
+}
+```
+
+`test/files/uploads.test.ts`
+```ts
+import { env } from "cloudflare:workers";
+import { beforeEach, describe, expect, it } from "vitest";
+import { getWorkById } from "../../src/lib/db/adminWorks";
+import { getFile, listWorkFiles, storageUsage } from "../../src/lib/db/files";
+import { PART_SIZE } from "../../src/lib/files/rules";
+import {
+  abortUpload,
+  cleanupStaleUploads,
+  completeUpload,
+  deleteFile,
+  deleteWorkWithFiles,
+  moveGalleryFile,
+  startUpload,
+  uploadPart,
+  uploadThumb,
+} from "../../src/lib/files/uploads";
+import { insertWorkRow, resetDb } from "../helpers/db";
+import { makeWorkRow } from "../helpers/factories";
+import { putCompleteFile, resetBucket } from "../helpers/files";
+
+const NOW = new Date("2026-10-30T00:00:00.000Z");
+const bytes = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer;
+
+async function uploadText(kind: "attachment" | "cover" | "gallery", text: string, extra: Record<string, unknown> = {}) {
+  const size = bytes(text).byteLength;
+  const started = await startUpload(env.DB, env.FILES, { workId: "w1", kind, fileName: "a.txt", relativePath: "", contentType: "text/plain", size, ...extra }, NOW);
+  if (!started.ok) throw new Error(JSON.stringify(started.errors));
+  const part = await uploadPart(env.DB, env.FILES, started.value.fileId, 1, bytes(text));
+  if (!part.ok) throw new Error("part");
+  return { fileId: started.value.fileId, part: part.value };
+}
+
+beforeEach(async () => {
+  await resetDb(env.DB);
+  await resetBucket(env.FILES);
+  await insertWorkRow(env.DB, makeWorkRow({ id: "w1", slug: "w1" }));
+});
+
+describe("업로드 흐름", () => {
+  it("시작하면 uploading 기록과 조각 크기를 돌려주고, 선언한 크기를 사용량에 넣는다", async () => {
+    const started = await startUpload(env.DB, env.FILES, { workId: "w1", kind: "attachment", fileName: "보고서.pdf", relativePath: "자료", contentType: "application/pdf", size: 1234 }, NOW);
+    expect(started.ok && started.value.partSize).toBe(PART_SIZE);
+    if (!started.ok) return;
+    expect(await getFile(env.DB, started.value.fileId)).toMatchObject({ status: "uploading", relativePath: "자료", r2Key: `works/w1/${started.value.fileId}` });
+    expect(await storageUsage(env.DB)).toBe(1234);
+  });
+
+  it("조각을 올리고 완료하면 complete가 되고 실제 크기를 남긴다", async () => {
+    const { fileId, part } = await uploadText("attachment", "첨부 내용");
+    const completed = await completeUpload(env.DB, env.FILES, fileId, [part]);
+    expect(completed.ok && completed.value).toMatchObject({ id: fileId, kind: "attachment", url: `/files/${fileId}/a.txt`, thumbUrl: null });
+    const file = await getFile(env.DB, fileId);
+    expect(file).toMatchObject({ status: "complete", uploadId: null, sizeBytes: bytes("첨부 내용").byteLength });
+    expect(await (await env.FILES.get(file!.r2Key))!.text()).toBe("첨부 내용");
+  });
+
+  it("10MiB 조각 두 개로 나눈 파일도 합친다", async () => {
+    const started = await startUpload(env.DB, env.FILES, { workId: "w1", kind: "attachment", fileName: "big.bin", relativePath: "", contentType: "", size: PART_SIZE + 3 }, NOW);
+    if (!started.ok) throw new Error("start");
+    const first = await uploadPart(env.DB, env.FILES, started.value.fileId, 1, new Uint8Array(PART_SIZE).buffer);
+    const second = await uploadPart(env.DB, env.FILES, started.value.fileId, 2, new Uint8Array(3).buffer);
+    if (!first.ok || !second.ok) throw new Error("parts");
+    const completed = await completeUpload(env.DB, env.FILES, started.value.fileId, [second.value, first.value]);
+    expect(completed.ok && completed.value.sizeBytes).toBe(PART_SIZE + 3);
+  });
+
+  it("이미지는 썸네일 크기를 합쳐 세고, 썸네일이 없으면 원본을 썸네일로 쓴다", async () => {
+    const withThumb = await uploadText("gallery", "원본", { contentType: "image/webp", size: bytes("원본").byteLength + bytes("썸").byteLength });
+    expect((await uploadThumb(env.DB, env.FILES, withThumb.fileId, bytes("썸"), "image/webp")).ok).toBe(true);
+    await completeUpload(env.DB, env.FILES, withThumb.fileId, [withThumb.part]);
+    const thumbFile = await getFile(env.DB, withThumb.fileId);
+    expect(thumbFile).toMatchObject({ thumbR2Key: `${thumbFile!.r2Key}.thumb`, sizeBytes: bytes("원본").byteLength + bytes("썸").byteLength });
+
+    const gif = await uploadText("gallery", "움짤", { contentType: "image/gif" });
+    await completeUpload(env.DB, env.FILES, gif.fileId, [gif.part]);
+    const gifFile = await getFile(env.DB, gif.fileId);
+    expect(gifFile!.thumbR2Key).toBe(gifFile!.r2Key);
+  });
+
+  it("전체 용량을 넘기거나 없는 작품이면 거절한다", async () => {
+    await env.DB.prepare(
+      "INSERT INTO files (id, work_id, kind, r2_key, original_name, content_type, size_bytes, status, created_at) VALUES ('big', 'w1', 'attachment', 'k', 'big', 'x/y', 9400000000, 'complete', 'now')",
+    ).run();
+    expect(await startUpload(env.DB, env.FILES, { workId: "w1", kind: "attachment", fileName: "a", contentType: "", size: 200_000_000 }, NOW)).toEqual({
+      ok: false,
+      status: 400,
+      errors: { file: "저장 공간이 부족해요. 10GB 중 9.40GB를 쓰고 있어요." },
+    });
+    expect(await startUpload(env.DB, env.FILES, { workId: "none", kind: "attachment", fileName: "a", contentType: "", size: 1 }, NOW)).toEqual({
+      ok: false,
+      status: 404,
+      errors: { file: "작품을 찾을 수 없어요." },
+    });
+  });
+
+  it("동시에 시작해도 전체 용량 상한을 넘지 않는다", async () => {
+    await env.DB.prepare(
+      "INSERT INTO files (id, work_id, kind, r2_key, original_name, content_type, size_bytes, status, created_at) VALUES ('big', 'w1', 'attachment', 'k', 'big', 'x/y', 9400000000, 'complete', 'now')",
+    ).run();
+    const request = { workId: "w1", kind: "attachment", fileName: "a", contentType: "", size: 100_000_000 };
+    const results = await Promise.all([1, 2, 3].map(() => startUpload(env.DB, env.FILES, request, NOW)));
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(await storageUsage(env.DB)).toBe(9_500_000_000);
+  });
+
+  it("완료할 때 실제 크기가 알린 크기보다 크면 거절하고 지운다", async () => {
+    const started = await startUpload(env.DB, env.FILES, { workId: "w1", kind: "attachment", fileName: "a", contentType: "", size: 1 }, NOW);
+    if (!started.ok) throw new Error("start");
+    const part = await uploadPart(env.DB, env.FILES, started.value.fileId, 1, bytes("다섯 글자"));
+    if (!part.ok) throw new Error("part");
+    expect(await completeUpload(env.DB, env.FILES, started.value.fileId, [part.value])).toEqual({
+      ok: false,
+      status: 400,
+      errors: { file: "올린 파일이 처음 알린 크기보다 커요. 다시 시도해 주세요." },
+    });
+    expect(await getFile(env.DB, started.value.fileId)).toBeNull();
+  });
+
+  it("대표 이미지를 새로 올리면 이전 대표 이미지를 지운다", async () => {
+    const old = await putCompleteFile(env.DB, env.FILES, { workId: "w1", kind: "cover", contentType: "image/png" });
+    const next = await uploadText("cover", "새 표지", { contentType: "image/png" });
+    await completeUpload(env.DB, env.FILES, next.fileId, [next.part]);
+    expect(await getFile(env.DB, old.id)).toBeNull();
+    expect(await env.FILES.head(old.r2Key)).toBeNull();
+    expect((await listWorkFiles(env.DB, "w1")).map((file) => file.id)).toEqual([next.fileId]);
+  });
+
+  it("중단하면 기록이 사라지고, 끝난 업로드에는 조각을 더 올릴 수 없다", async () => {
+    const { fileId } = await uploadText("attachment", "중단");
+    expect(await abortUpload(env.DB, env.FILES, fileId)).toEqual({ ok: true, value: null });
+    expect(await getFile(env.DB, fileId)).toBeNull();
+    expect(await uploadPart(env.DB, env.FILES, fileId, 1, bytes("x"))).toEqual({
+      ok: false,
+      status: 404,
+      errors: { file: "파일을 찾을 수 없어요." },
+    });
+  });
+});
+
+describe("파일 정리", () => {
+  it("파일 하나를 지우면 R2 객체와 썸네일도 지운다", async () => {
+    const file = await putCompleteFile(env.DB, env.FILES, { workId: "w1", kind: "gallery", contentType: "image/png", thumbBody: "썸" });
+    expect(await deleteFile(env.DB, env.FILES, file.id)).toEqual({ ok: true, value: null });
+    expect(await env.FILES.head(file.r2Key)).toBeNull();
+    expect(await env.FILES.head(file.thumbR2Key!)).toBeNull();
+  });
+
+  it("작품을 지우면 그 작품의 파일과 R2 객체가 모두 사라진다", async () => {
+    const a = await putCompleteFile(env.DB, env.FILES, { workId: "w1", kind: "attachment" });
+    const b = await putCompleteFile(env.DB, env.FILES, { workId: "w1", kind: "cover", contentType: "image/png" });
+    expect(await deleteWorkWithFiles(env.DB, env.FILES, "w1")).toBe(true);
+    expect(await getWorkById(env.DB, "w1")).toBeNull();
+    expect(await env.FILES.head(a.r2Key)).toBeNull();
+    expect(await env.FILES.head(b.r2Key)).toBeNull();
+    expect(await storageUsage(env.DB)).toBe(0);
+  });
+
+  it("24시간 넘게 uploading으로 남은 기록만 정리한다", async () => {
+    const yesterday = new Date(NOW.getTime() - 25 * 60 * 60 * 1000);
+    const stale = await startUpload(env.DB, env.FILES, { workId: "w1", kind: "attachment", fileName: "old", contentType: "", size: 1 }, yesterday);
+    const fresh = await startUpload(env.DB, env.FILES, { workId: "w1", kind: "attachment", fileName: "new", contentType: "", size: 1 }, NOW);
+    if (!stale.ok || !fresh.ok) throw new Error("start");
+    expect(await cleanupStaleUploads(env.DB, env.FILES, NOW)).toBe(1);
+    expect(await getFile(env.DB, stale.value.fileId)).toBeNull();
+    expect(await getFile(env.DB, fresh.value.fileId)).not.toBeNull();
+  });
+
+  it("스크린샷 순서를 위아래로 바꾼다", async () => {
+    const first = await putCompleteFile(env.DB, env.FILES, { workId: "w1", kind: "gallery", contentType: "image/png" });
+    const second = await putCompleteFile(env.DB, env.FILES, { workId: "w1", kind: "gallery", contentType: "image/png" });
+    await moveGalleryFile(env.DB, second.id, "up");
+    expect((await listWorkFiles(env.DB, "w1")).map((file) => file.id)).toEqual([second.id, first.id]);
+    await moveGalleryFile(env.DB, second.id, "up");
+    expect((await listWorkFiles(env.DB, "w1")).map((file) => file.id)).toEqual([second.id, first.id]);
+  });
+});
+```
