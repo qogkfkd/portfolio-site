@@ -10,5 +10,11 @@
       "database_name": "portfolio",
       "migrations_dir": "migrations"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "portfolio-files"
+    }
   ]
 }

@@ -11,6 +11,7 @@ export default defineConfig({
           compatibilityDate: "2026-10-01",
           compatibilityFlags: ["nodejs_compat"],
           d1Databases: ["DB"],
+          r2Buckets: ["FILES"],
           bindings: { TEST_MIGRATIONS: migrations },
         },
       };

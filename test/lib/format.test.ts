@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatPeriod, teamLabel } from "../../src/lib/format";
+import { formatBytes, formatDate, formatPeriod, teamLabel } from "../../src/lib/format";
 
 describe("formatDate", () => {
   it("날짜를 점으로 구분한다", () => {
@@ -23,5 +23,15 @@ describe("teamLabel", () => {
     expect(teamLabel("team", 4)).toBe("팀 (4명)");
     expect(teamLabel("team", null)).toBe("팀");
     expect(teamLabel(null, 3)).toBeNull();
+  });
+});
+
+describe("formatBytes", () => {
+  it("10진수 단위로 짧게 표시한다", () => {
+    expect(formatBytes(512)).toBe("512 B");
+    expect(formatBytes(1_500)).toBe("1.5 KB");
+    expect(formatBytes(3_400_000)).toBe("3.4 MB");
+    expect(formatBytes(250_000_000)).toBe("250 MB");
+    expect(formatBytes(2_500_000_000)).toBe("2.5 GB");
   });
 });
