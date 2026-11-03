@@ -1,9 +1,8 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { deleteWork } from "../../../../../lib/db/adminWorks";
+import { deleteWorkWithFiles } from "../../../../../lib/files/uploads";
 
-// 3단계에서 R2 객체 삭제를 여기에 더한다.
 export const POST: APIRoute = async ({ params, redirect }) => {
-  await deleteWork(env.DB, params.id ?? "");
+  await deleteWorkWithFiles(env.DB, env.FILES, params.id ?? "");
   return redirect("/admin?deleted=1", 303);
 };
