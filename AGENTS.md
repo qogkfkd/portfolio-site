@@ -12,7 +12,7 @@
 |---|---|
 | 의존성 설치 | `npm install` |
 | 로컬 비밀값 준비 | `.dev.vars.example`을 `.dev.vars`로 복사 (로컬 관리자 비밀번호: `portfolio-dev-password`) |
-| 관리자 비밀번호 해시 만들기 | `npm run hash-password -- "비밀번호"` |
+| 관리자 비밀번호 해시 만들기 | `npm run hash-password` (물어보는 칸에 비밀번호를 넣는다) |
 | 로컬 DB 마이그레이션 | `npm run db:migrate:local` |
 | 로컬 예시 데이터 넣기 | `npm run db:seed:local` |
 | 개발 서버 | `npm run dev` |
@@ -20,6 +20,9 @@
 | 타입 검사 | `npm run check` |
 | 빌드 | `npm run build` |
 | 화면 점검 | `npm run smoke` (마이그레이션, 예시 데이터, `.dev.vars`를 먼저 준비한다) |
+| 브라우저 흐름 시험 | `npm run e2e` (`.dev.vars`를 먼저 준비한다. 설치된 Chrome을 쓰고, 화면 사진을 `e2e-screens/`에 남긴다) |
+| 배포 | `npm run deploy` (사용자가 직접 한다. 순서는 `docs/배포-안내.md`) |
+| 원격 DB 마이그레이션 | `npm run db:migrate:remote` (사용자가 직접 한다) |
 
 ## 지킬 것
 
@@ -35,5 +38,6 @@
 - 비밀값(`ADMIN_PASSWORD_HASH`, `SESSION_SECRET`)은 코드나 `wrangler.jsonc`에 쓰지 않는다. 로컬은 `.dev.vars`, 운영은 `wrangler secret put`(4단계 안내서)으로 넣는다.
 - 파일 기능은 `src/lib/files/`에 있다. 업로드는 R2 멀티파트(10MiB 조각), 파일 제공은 `/files/{id}/{이름}`(썸네일은 `?v=thumb`)이다. 용량 상수는 `src/lib/files/rules.ts`에 있다.
 - R2도 같은 파일 안의 테스트끼리 격리되지 않는다. 파일 테스트는 `beforeEach`에서 `resetBucket(env.FILES)`도 부른다.
-- Codex 샌드박스에서는 `.git` 쓰기와 개발 서버 실행이 막혀 있다. 커밋, `npm run dev`, `npm run smoke`는 Claude가 리뷰 때 샌드박스 밖에서 한다.
-- 배포(`wrangler deploy`), 로그인(`wrangler login`), `--remote` 명령, `git push`는 하지 않는다.
+- 브라우저 시험은 `e2e/`에 있고 배포용 빌드를 포트 4400에 띄워 돈다. 시험 데이터는 제목을 `E2E `로 시작하고, 시험 앞뒤로 `e2e/cleanup.ts`가 지운다.
+- Codex 샌드박스에서는 `.git` 쓰기와 개발 서버 실행이 막혀 있다. 커밋, `npm run dev`, `npm run smoke`, `npm run e2e`는 Claude가 리뷰 때 샌드박스 밖에서 한다.
+- 배포(`wrangler deploy`, `npm run deploy`), 로그인(`wrangler login`), `--remote` 명령, `git push`는 Claude와 Codex가 하지 않는다. 사용자가 `docs/배포-안내.md`를 따라 직접 한다.
