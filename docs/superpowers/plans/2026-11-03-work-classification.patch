@@ -1,0 +1,976 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 63f8d2d..ab1646c 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -38,6 +38,8 @@
+ - 비밀값(`ADMIN_PASSWORD_HASH`, `SESSION_SECRET`)은 코드나 `wrangler.jsonc`에 쓰지 않는다. 로컬은 `.dev.vars`, 운영은 `wrangler secret put`(4단계 안내서)으로 넣는다.
+ - 파일 기능은 `src/lib/files/`에 있다. 업로드는 R2 멀티파트(10MiB 조각), 파일 제공은 `/files/{id}/{이름}`(썸네일은 `?v=thumb`)이다. 용량 상수는 `src/lib/files/rules.ts`에 있다.
+ - R2도 같은 파일 안의 테스트끼리 격리되지 않는다. 파일 테스트는 `beforeEach`에서 `resetBucket(env.FILES)`도 부른다.
++- 작품의 개발 방식은 `dev_method`(`hand` 직접 코딩, `ai` AI 협업)이다. 배지는 `DevMethodBadge`, 걸러 보기 쿼리는 `method`다.
++- 첨부파일은 `?v=view`일 때 `VIEWABLE_TYPES`(`src/lib/files/types.ts`)만 브라우저에서 바로 보여 준다. svg와 html은 넣지 않는다.
+ - 브라우저 시험은 `e2e/`에 있고 배포용 빌드를 포트 4400에 띄워 돈다. 시험 데이터는 제목을 `E2E `로 시작하고, 시험 앞뒤로 `e2e/cleanup.ts`가 지운다.
+ - Codex 샌드박스에서는 `.git` 쓰기와 개발 서버 실행이 막혀 있다. 커밋, `npm run dev`, `npm run smoke`, `npm run e2e`는 Claude가 리뷰 때 샌드박스 밖에서 한다.
+ - 배포(`wrangler deploy`, `npm run deploy`), 로그인(`wrangler login`), `--remote` 명령, `git push`는 Claude와 Codex가 하지 않는다. 사용자가 `docs/배포-안내.md`를 따라 직접 한다.
+diff --git a/README.md b/README.md
+index 4d51afe..77051f6 100644
+--- a/README.md
++++ b/README.md
+@@ -9,8 +9,9 @@
+ ## 기능
+ 
+ **방문자 화면**
+-- 대표작과 전체 작품 목록, 분야·연도·수상 걸러 보기
+-- 작품 상세: 대표 이미지, 스크린샷 크게 보기, 유튜브 영상, 폴더별 첨부파일 내려받기
++- 대표작(수상작 먼저)과 전체 작품 목록, 개발 방식·분야·연도·수상 걸러 보기
++- 작품마다 직접 코딩과 AI 협업을 배지로 구분
++- 작품 상세: 대표 이미지, 스크린샷 크게 보기, 유튜브 영상, 폴더별 첨부파일 내려받기, PDF와 이미지 바로 보기
+ - JavaScript 없이도 핵심 기능이 동작하고, 링크 미리보기(Open Graph)를 지원합니다.
+ 
+ **관리자 화면**
+@@ -39,10 +40,10 @@
+ 
+ | 명령 | 내용 |
+ |---|---|
+-| `npm test` | 단위·DB 테스트 134개 |
++| `npm test` | 단위·DB 테스트 145개 |
+ | `npm run check` | 타입 검사 |
+ | `npm run smoke` | 실제 서버 응답 점검 59개 |
+-| `npm run e2e` | 실제 브라우저 흐름과 화면 폭별 시험 16개 |
++| `npm run e2e` | 실제 브라우저 흐름과 화면 폭별 시험 20개 |
+ 
+ ## 실행
+ 
+diff --git a/e2e/classify.spec.ts b/e2e/classify.spec.ts
+new file mode 100644
+index 0000000..4b89951
+--- /dev/null
++++ b/e2e/classify.spec.ts
+@@ -0,0 +1,99 @@
++import { expect, test, type BrowserContext, type Page } from "@playwright/test";
++import { createWork, login, publish, waitForUploads, workRow, type CreatedWork } from "./helpers";
++
++// 개발 방식 구분과 첨부파일 바로 보기.
++const HAND = "E2E 직접 코딩";
++const AI = "E2E AI 협업";
++
++async function editWork(page: Page, work: CreatedWork, values: { method: "hand" | "ai"; award?: string; date: string }) {
++  await page.goto(`/admin/works/${work.id}/edit`);
++  await page.locator(`input[name=devMethod][value=${values.method}]`).check();
++  await page.locator("#participatedOn").fill(values.date);
++  if (values.award) await page.locator("#award").fill(values.award);
++  await page.locator(".form-actions button[type=submit]").click();
++  await expect(page.locator(".alert-success")).toHaveText("저장했어요.");
++}
++
++test.describe.serial("개발 방식과 파일 보기", () => {
++  let adminContext: BrowserContext;
++  let visitorContext: BrowserContext;
++  let admin: Page;
++  let visitor: Page;
++  let hand: CreatedWork;
++  let ai: CreatedWork;
++
++  test.beforeAll(async ({ browser }) => {
++    adminContext = await browser.newContext();
++    visitorContext = await browser.newContext();
++    admin = await adminContext.newPage();
++    visitor = await visitorContext.newPage();
++    await login(admin);
++    hand = await createWork(admin, HAND, "E2E분류");
++    await editWork(admin, hand, { method: "hand", award: "금상", date: "2026-04-01" });
++    await admin.locator("#attachment-input").setInputFiles([
++      { name: "대회 안내.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF\n") },
++      { name: "개최 계획.hwp", mimeType: "application/x-hwp", buffer: Buffer.from("hwp") },
++    ]);
++    await expect(admin.locator(".attachment-list li")).toHaveCount(2);
++    await waitForUploads(admin);
++    ai = await createWork(admin, AI, "E2E분류");
++    await editWork(admin, ai, { method: "ai", date: "2026-10-01" });
++    for (const title of [HAND, AI]) {
++      await publish(admin, title);
++      await workRow(admin, title).getByRole("button", { name: "대표작으로" }).click();
++      await expect(workRow(admin, title).locator(".status-featured")).toBeVisible();
++    }
++  });
++
++  test.afterAll(async () => {
++    await adminContext.close();
++    await visitorContext.close();
++  });
++
++  test("수정 화면을 다시 열어도 개발 방식이 남아 있다", async () => {
++    await admin.goto(`/admin/works/${hand.id}/edit`);
++    await expect(admin.locator("input[name=devMethod][value=hand]")).toBeChecked();
++    await admin.goto("/admin");
++    await expect(workRow(admin, HAND)).toContainText("직접 코딩");
++  });
++
++  test("카드와 상세에 배지가 보이고, 대표작은 수상작이 먼저다", async () => {
++    await visitor.goto("/");
++    const handCard = visitor.locator(`article[data-list="all"][data-work="${hand.slug}"]`);
++    await expect(handCard.locator(".badge-method-hand")).toHaveText("직접 코딩");
++    await expect(visitor.locator(`article[data-list="all"][data-work="${ai.slug}"] .badge-method-ai`)).toHaveText("AI 협업");
++
++    const featured = await visitor.locator('article[data-list="featured"]').evaluateAll((els) => els.map((el) => el.getAttribute("data-work")));
++    expect(featured.indexOf(hand.slug)).toBeLessThan(featured.indexOf(ai.slug));
++
++    await visitor.goto(hand.path);
++    await expect(visitor.locator(".head .badge-method-hand")).toHaveText("직접 코딩");
++  });
++
++  test("개발 방식으로 걸러 본다", async () => {
++    await visitor.goto("/");
++    await visitor.locator("select[name=method]").selectOption("hand");
++    await expect(visitor).toHaveURL(/method=hand/);
++    const cards = visitor.locator('article[data-list="all"]');
++    await expect(cards.filter({ hasText: HAND })).toHaveCount(1);
++    await expect(cards.filter({ hasText: AI })).toHaveCount(0);
++    await expect(visitor.locator("select[name=method]")).toHaveValue("hand");
++    for (const card of await cards.all()) await expect(card.locator(".badge-method-hand")).toBeVisible();
++  });
++
++  test("PDF는 보기와 내려받기가 되고, hwp는 내려받기만 된다", async () => {
++    await visitor.goto(hand.path);
++    const view = visitor.getByRole("link", { name: "대회 안내.pdf 보기" });
++    await expect(view).toHaveAttribute("href", /\?v=view$/);
++    await expect(view).toHaveAttribute("target", "_blank");
++    await expect(visitor.getByRole("link", { name: "개최 계획.hwp 보기" })).toHaveCount(0);
++
++    const shown = await visitorContext.request.get((await view.getAttribute("href"))!);
++    expect(shown.status()).toBe(200);
++    expect(shown.headers()["content-disposition"]).toMatch(/^inline;/);
++    expect(shown.headers()["content-type"]).toBe("application/pdf");
++
++    const [download] = await Promise.all([visitor.waitForEvent("download"), visitor.getByRole("link", { name: "개최 계획.hwp", exact: true }).click()]);
++    expect(download.suggestedFilename()).toBe("개최 계획.hwp");
++  });
++});
+diff --git a/e2e/helpers.ts b/e2e/helpers.ts
+index ce968c7..2196a4b 100644
+--- a/e2e/helpers.ts
++++ b/e2e/helpers.ts
+@@ -16,10 +16,10 @@ export async function login(page: Page): Promise<void> {
+ }
+ 
+ // 새 작품을 저장하고 수정 화면에 머문다.
+-export async function createWork(page: Page, title: string): Promise<CreatedWork> {
++export async function createWork(page: Page, title: string, field = "E2E분야"): Promise<CreatedWork> {
+   await page.goto("/admin/works/new");
+   await page.locator("#title").fill(title);
+-  await page.locator("#fields").fill("E2E분야");
++  await page.locator("#fields").fill(field);
+   await page.locator("#fields").press("Enter");
+   await page.locator(".ProseMirror").click();
+   await page.keyboard.type("E2E 시험용 설명입니다.");
+diff --git a/migrations/0002_dev_method.sql b/migrations/0002_dev_method.sql
+new file mode 100644
+index 0000000..387adcd
+--- /dev/null
++++ b/migrations/0002_dev_method.sql
+@@ -0,0 +1,2 @@
++-- 작품의 개발 방식. hand는 직접 코딩, ai는 AI 협업, NULL은 표시하지 않는다.
++ALTER TABLE works ADD COLUMN dev_method TEXT CHECK (dev_method IN ('hand', 'ai'));
+diff --git a/src/components/AttachmentList.astro b/src/components/AttachmentList.astro
+index 2092493..1db0330 100644
+--- a/src/components/AttachmentList.astro
++++ b/src/components/AttachmentList.astro
+@@ -21,7 +21,14 @@ const groups = groupAttachments(Astro.props.files);
+               <a href={file.url} download={file.name}>
+                 {file.name}
+               </a>
+-              <span class="size">{formatBytes(file.sizeBytes)}</span>
++              <span class="side">
++                {file.viewUrl && (
++                  <a class="view" href={file.viewUrl} target="_blank" rel="noopener" aria-label={`${file.name} 보기`}>
++                    보기
++                  </a>
++                )}
++                <span class="size">{formatBytes(file.sizeBytes)}</span>
++              </span>
+             </li>
+           ))}
+         </ul>
+@@ -60,6 +67,14 @@ const groups = groupAttachments(Astro.props.files);
+     color: var(--accent);
+     font-weight: 600;
+   }
++  .side {
++    display: inline-flex;
++    align-items: center;
++    gap: 12px;
++  }
++  .view {
++    font-size: 14px;
++  }
+   .size {
+     color: var(--muted);
+     font-size: 14px;
+diff --git a/src/components/DevMethodBadge.astro b/src/components/DevMethodBadge.astro
+new file mode 100644
+index 0000000..dc52896
+--- /dev/null
++++ b/src/components/DevMethodBadge.astro
+@@ -0,0 +1,11 @@
++---
++import { DEV_METHOD_LABELS, type DevMethod } from "../lib/types";
++
++interface Props {
++  method: DevMethod;
++}
++
++const { method } = Astro.props;
++---
++
++<span class:list={["badge-method", `badge-method-${method}`]}>{DEV_METHOD_LABELS[method]}</span>
+diff --git a/src/components/FilterBar.astro b/src/components/FilterBar.astro
+index 2eab2e7..73deab4 100644
+--- a/src/components/FilterBar.astro
++++ b/src/components/FilterBar.astro
+@@ -1,17 +1,29 @@
+ ---
+-import type { WorkFilters } from "../lib/types";
++import { DEV_METHOD_LABELS, type DevMethod, type WorkFilters } from "../lib/types";
+ import { hasActiveFilters } from "../lib/works/filter";
+ 
+ interface Props {
+   filters: WorkFilters;
+   fields: string[];
+   years: number[];
++  methods: DevMethod[];
+ }
+ 
+-const { filters, fields, years } = Astro.props;
++const { filters, fields, years, methods } = Astro.props;
+ ---
+ 
+ <form class="filters" method="get" action="/#works" data-filter-form>
++  {
++    methods.length > 0 && (
++      <label>
++        <span class="visually-hidden">개발 방식</span>
++        <select name="method">
++          <option value="">모든 개발 방식</option>
++          {methods.map((method) => <option value={method} selected={filters.method === method}>{DEV_METHOD_LABELS[method]}</option>)}
++        </select>
++      </label>
++    )
++  }
+   <label>
+     <span class="visually-hidden">분야</span>
+     <select name="field">
+diff --git a/src/components/WorkCard.astro b/src/components/WorkCard.astro
+index 1714cfb..5df0e62 100644
+--- a/src/components/WorkCard.astro
++++ b/src/components/WorkCard.astro
+@@ -1,4 +1,5 @@
+ ---
++import DevMethodBadge from "./DevMethodBadge.astro";
+ import type { Work } from "../lib/types";
+ import { fieldColor } from "../lib/works/fieldColor";
+ import { isAwarded } from "../lib/works/filter";
+@@ -30,7 +31,10 @@ const meta = [work.competition, `${yearOf(work)}년`].filter((part) => part !==
+     }
+   </div>
+   <div class="body">
+-    <ul class="tags">{work.fields.map((field) => <li class="tag">{field}</li>)}</ul>
++    <ul class="tags">
++      {work.devMethod && <li><DevMethodBadge method={work.devMethod} /></li>}
++      {work.fields.map((field) => <li class="tag">{field}</li>)}
++    </ul>
+     <h3 class="title"><a href={href}>{work.title}</a></h3>
+     <p class="summary">{summaryOf(work)}</p>
+     <div class="meta">
+diff --git a/src/components/admin/WorkForm.tsx b/src/components/admin/WorkForm.tsx
+index eeab5b8..f03d572 100644
+--- a/src/components/admin/WorkForm.tsx
++++ b/src/components/admin/WorkForm.tsx
+@@ -1,5 +1,5 @@
+ import { useState } from "react";
+-import type { WorkLink } from "../../lib/types";
++import { DEV_METHOD_LABELS, type WorkLink } from "../../lib/types";
+ import { charCount } from "../../lib/validate/common";
+ import { LINKS_MAX, validateWorkInput, type WorkInput } from "../../lib/validate/work";
+ import { SUMMARY_MAX } from "../../lib/works/summary";
+@@ -148,6 +148,16 @@ export default function WorkForm({ mode, workId, initial, suggestions, savedNoti
+         <Field id="role" label="내 역할" error={errors.role}>
+           <input id="role" type="text" value={values.role} aria-invalid={invalid("role")} onChange={(e) => set("role", e.target.value)} />
+         </Field>
++        <Field id="devMethod" label="개발 방식" help="직접 코딩은 코드를 직접 짠 작품, AI 협업은 AI와 함께 구현한 작품이에요.">
++          <div className="choice-row" id="devMethod">
++            {([["", "선택 안 함"], ["hand", DEV_METHOD_LABELS.hand], ["ai", DEV_METHOD_LABELS.ai]] as const).map(([value, label]) => (
++              <label key={value}>
++                <input type="radio" name="devMethod" value={value} checked={values.devMethod === value} onChange={() => set("devMethod", value)} />
++                {label}
++              </label>
++            ))}
++          </div>
++        </Field>
+       </section>
+ 
+       <section className="form-section">
+diff --git a/src/lib/db/adminWorks.ts b/src/lib/db/adminWorks.ts
+index 595d252..7dd3e8c 100644
+--- a/src/lib/db/adminWorks.ts
++++ b/src/lib/db/adminWorks.ts
+@@ -27,6 +27,7 @@ function draftColumns(draft: WorkDraft) {
+     team_type: draft.teamType,
+     team_size: draft.teamSize,
+     role: draft.role,
++    dev_method: draft.devMethod,
+   };
+ }
+ 
+diff --git a/src/lib/db/rows.ts b/src/lib/db/rows.ts
+index 5c060a2..b702273 100644
+--- a/src/lib/db/rows.ts
++++ b/src/lib/db/rows.ts
+@@ -1,4 +1,4 @@
+-import { LINK_KINDS, type LinkKind, type Profile, type ProfileLink, type TeamType, type Work, type WorkLink } from "../types";
++import { LINK_KINDS, isDevMethod, type LinkKind, type Profile, type ProfileLink, type TeamType, type Work, type WorkLink } from "../types";
+ 
+ export interface WorkRow {
+   id: string;
+@@ -18,6 +18,7 @@ export interface WorkRow {
+   team_type: string | null;
+   team_size: number | null;
+   role: string | null;
++  dev_method: string | null;
+   is_public: number;
+   is_featured: number;
+   created_at: string;
+@@ -111,6 +112,7 @@ export function rowToWork(row: WorkRow): Work {
+     teamType,
+     teamSize: teamType === "team" ? row.team_size : null,
+     role: emptyToNull(row.role),
++    devMethod: isDevMethod(row.dev_method) ? row.dev_method : null,
+     isPublic: row.is_public === 1,
+     isFeatured: row.is_featured === 1,
+     createdAt: row.created_at,
+diff --git a/src/lib/files/serve.ts b/src/lib/files/serve.ts
+index ced6af8..8be2e2d 100644
+--- a/src/lib/files/serve.ts
++++ b/src/lib/files/serve.ts
+@@ -1,13 +1,13 @@
+ import { getWorkById } from "../db/adminWorks";
+ import { getFile } from "../db/files";
+ import { parseRange } from "./range";
+-import type { FileKind } from "./types";
++import { isViewableType, type FileKind } from "./types";
+ 
+ // RFC 5987: 한글 파일명은 filename*=UTF-8''로 보내고, 옛 브라우저용 filename에는 ASCII만 남긴다.
+-export function contentDisposition(kind: FileKind, name: string): string {
++export function contentDisposition(kind: FileKind, name: string, view = false): string {
+   const encoded = encodeURIComponent(name).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+   const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, "_");
+-  return `${kind === "attachment" ? "attachment" : "inline"}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
++  return `${kind === "attachment" && !view ? "attachment" : "inline"}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+ }
+ 
+ function notFound(): Response {
+@@ -31,11 +31,14 @@ export async function serveFile(
+   }
+   if (!isPublic && !isAdmin) return notFound();
+ 
+-  const key = new URL(request.url).searchParams.get("v") === "thumb" ? (file.thumbR2Key ?? file.r2Key) : file.r2Key;
++  const variant = new URL(request.url).searchParams.get("v");
++  const key = variant === "thumb" ? (file.thumbR2Key ?? file.r2Key) : file.r2Key;
++  // 허용한 형식의 첨부파일만 바로 보여 준다. 보안 머리글은 내려받을 때와 같다.
++  const view = variant === "view" && isViewableType(file.contentType);
+   const headers = new Headers({
+     "Accept-Ranges": "bytes",
+     "Cache-Control": isPublic ? "public, max-age=86400" : "private, no-store",
+-    "Content-Disposition": contentDisposition(file.kind, file.originalName),
++    "Content-Disposition": contentDisposition(file.kind, file.originalName, view),
+     "X-Content-Type-Options": "nosniff",
+   });
+   if (file.kind === "attachment") headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
+diff --git a/src/lib/files/types.ts b/src/lib/files/types.ts
+index b74f52d..bc2e562 100644
+--- a/src/lib/files/types.ts
++++ b/src/lib/files/types.ts
+@@ -18,7 +18,14 @@ export interface FileRecord {
+   createdAt: string;
+ }
+ 
+-// 화면과 관리자 폼에 넘기는 모양. 주소는 /files/{id}/{이름}이고 썸네일은 ?v=thumb를 붙인다.
++// 첨부파일 중 브라우저에서 바로 보여 줄 형식. svg와 html은 넣지 않는다.
++export const VIEWABLE_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"] as const;
++
++export function isViewableType(contentType: string): boolean {
++  return (VIEWABLE_TYPES as readonly string[]).includes(contentType.trim().toLowerCase());
++}
++
++// 화면과 관리자 폼에 넘기는 모양. 주소는 /files/{id}/{이름}이고 썸네일은 ?v=thumb, 바로 보기는 ?v=view를 붙인다.
+ export interface FileView {
+   id: string;
+   kind: FileKind;
+@@ -27,11 +34,12 @@ export interface FileView {
+   sizeBytes: number;
+   url: string;
+   thumbUrl: string | null;
++  viewUrl: string | null;
+ }
+ 
+-export function fileUrl(file: Pick<FileRecord, "id" | "originalName">, variant: "main" | "thumb" = "main"): string {
++export function fileUrl(file: Pick<FileRecord, "id" | "originalName">, variant: "main" | "thumb" | "view" = "main"): string {
+   const base = `/files/${file.id}/${encodeURIComponent(file.originalName)}`;
+-  return variant === "thumb" ? `${base}?v=thumb` : base;
++  return variant === "main" ? base : `${base}?v=${variant}`;
+ }
+ 
+ export function toFileView(file: FileRecord): FileView {
+@@ -43,5 +51,6 @@ export function toFileView(file: FileRecord): FileView {
+     sizeBytes: file.sizeBytes,
+     url: fileUrl(file),
+     thumbUrl: file.thumbR2Key ? fileUrl(file, "thumb") : null,
++    viewUrl: file.kind === "attachment" && isViewableType(file.contentType) ? fileUrl(file, "view") : null,
+   };
+ }
+diff --git a/src/lib/types.ts b/src/lib/types.ts
+index bfe2c46..f6314b6 100644
+--- a/src/lib/types.ts
++++ b/src/lib/types.ts
+@@ -16,6 +16,18 @@ export interface WorkLink {
+ 
+ export type TeamType = "solo" | "team";
+ 
++export const DEV_METHODS = ["hand", "ai"] as const;
++export type DevMethod = (typeof DEV_METHODS)[number];
++
++export const DEV_METHOD_LABELS: Record<DevMethod, string> = {
++  hand: "직접 코딩",
++  ai: "AI 협업",
++};
++
++export function isDevMethod(value: unknown): value is DevMethod {
++  return DEV_METHODS.includes(value as DevMethod);
++}
++
+ export interface Work {
+   id: string;
+   slug: string;
+@@ -34,6 +46,7 @@ export interface Work {
+   teamType: TeamType | null;
+   teamSize: number | null;
+   role: string | null;
++  devMethod: DevMethod | null;
+   isPublic: boolean;
+   isFeatured: boolean;
+   createdAt: string;
+@@ -59,4 +72,5 @@ export interface WorkFilters {
+   field: string | null;
+   year: number | null;
+   award: boolean;
++  method: DevMethod | null;
+ }
+diff --git a/src/lib/validate/work.ts b/src/lib/validate/work.ts
+index 58fe354..c854d54 100644
+--- a/src/lib/validate/work.ts
++++ b/src/lib/validate/work.ts
+@@ -1,5 +1,5 @@
+ import { isHttpUrl } from "../db/rows";
+-import { LINK_KINDS, type LinkKind, type TeamType, type Work, type WorkLink } from "../types";
++import { LINK_KINDS, isDevMethod, type DevMethod, type LinkKind, type TeamType, type Work, type WorkLink } from "../types";
+ import { isValidSlug } from "../works/slug";
+ import { SUMMARY_MAX, stripHtml } from "../works/summary";
+ import { URL_MESSAGE, charCount, isIsoDate, nullable, record, tagList, text, type FieldErrors, type Validation } from "./common";
+@@ -29,6 +29,7 @@ export interface WorkInput {
+   teamType: "" | TeamType;
+   teamSize: string;
+   role: string;
++  devMethod: "" | DevMethod;
+ }
+ 
+ export interface WorkDraft {
+@@ -48,6 +49,7 @@ export interface WorkDraft {
+   teamType: TeamType | null;
+   teamSize: number | null;
+   role: string | null;
++  devMethod: DevMethod | null;
+ }
+ 
+ export const EMPTY_WORK_INPUT: WorkInput = {
+@@ -67,6 +69,7 @@ export const EMPTY_WORK_INPUT: WorkInput = {
+   teamType: "",
+   teamSize: "",
+   role: "",
++  devMethod: "",
+ };
+ 
+ export function workToInput(work: Work): WorkInput {
+@@ -87,6 +90,7 @@ export function workToInput(work: Work): WorkInput {
+     teamType: work.teamType ?? "",
+     teamSize: work.teamSize === null ? "" : String(work.teamSize),
+     role: work.role ?? "",
++    devMethod: work.devMethod ?? "",
+   };
+ }
+ 
+@@ -147,6 +151,9 @@ export function validateWorkInput(raw: unknown): Validation<WorkDraft> {
+     }
+   }
+ 
++  const devMethodText = text(input.devMethod);
++  const devMethod = isDevMethod(devMethodText) ? devMethodText : null;
++
+   const links: WorkLink[] = [];
+   const rawLinks = Array.isArray(input.links) ? input.links : [];
+   rawLinks.forEach((item, index) => {
+@@ -186,6 +193,7 @@ export function validateWorkInput(raw: unknown): Validation<WorkDraft> {
+       teamType,
+       teamSize,
+       role,
++      devMethod,
+     },
+   };
+ }
+diff --git a/src/lib/works/filter.ts b/src/lib/works/filter.ts
+index 7713e87..72f47ae 100644
+--- a/src/lib/works/filter.ts
++++ b/src/lib/works/filter.ts
+@@ -1,22 +1,22 @@
+-import type { Work, WorkFilters } from "../types";
+-import { yearOf } from "./sort";
++import { DEV_METHODS, isDevMethod, type DevMethod, type Work, type WorkFilters } from "../types";
++import { isAwarded, yearOf } from "./sort";
++
++export { isAwarded };
+ 
+ export function parseFilters(params: URLSearchParams): WorkFilters {
+   const field = params.get("field")?.trim() ?? "";
+   const year = params.get("year")?.trim() ?? "";
++  const method = params.get("method")?.trim();
+   return {
+     field: field === "" ? null : field,
+     year: /^\d{4}$/.test(year) ? Number(year) : null,
+     award: params.get("award") === "1",
++    method: isDevMethod(method) ? method : null,
+   };
+ }
+ 
+ export function hasActiveFilters(filters: WorkFilters): boolean {
+-  return filters.field !== null || filters.year !== null || filters.award;
+-}
+-
+-export function isAwarded(work: Pick<Work, "award">): boolean {
+-  return work.award !== null && work.award.trim() !== "";
++  return filters.field !== null || filters.year !== null || filters.award || filters.method !== null;
+ }
+ 
+ export function applyFilters(works: readonly Work[], filters: WorkFilters): Work[] {
+@@ -24,14 +24,16 @@ export function applyFilters(works: readonly Work[], filters: WorkFilters): Work
+     (work) =>
+       (filters.field === null || work.fields.includes(filters.field)) &&
+       (filters.year === null || yearOf(work) === filters.year) &&
+-      (!filters.award || isAwarded(work)),
++      (!filters.award || isAwarded(work)) &&
++      (filters.method === null || work.devMethod === filters.method),
+   );
+ }
+ 
+-export function filterOptions(works: readonly Work[]): { fields: string[]; years: number[] } {
++export function filterOptions(works: readonly Work[]): { fields: string[]; years: number[]; methods: DevMethod[] } {
+   const fields = [...new Set(works.flatMap((work) => work.fields))].sort((a, b) => a.localeCompare(b, "ko"));
+   const years = [...new Set(works.map(yearOf))].sort((a, b) => b - a);
+-  return { fields, years };
++  const methods = DEV_METHODS.filter((method) => works.some((work) => work.devMethod === method));
++  return { fields, years, methods };
+ }
+ 
+ export function emptyStateMessage(totalPublic: number, filters: WorkFilters): string {
+diff --git a/src/lib/works/sort.ts b/src/lib/works/sort.ts
+index 6341f06..89050df 100644
+--- a/src/lib/works/sort.ts
++++ b/src/lib/works/sort.ts
+@@ -10,6 +10,10 @@ export function yearOf(work: Dated): number {
+   return Number(sortDateOf(work).slice(0, 4));
+ }
+ 
++export function isAwarded(work: Pick<Work, "award">): boolean {
++  return work.award !== null && work.award.trim() !== "";
++}
++
+ function descending(a: string, b: string): number {
+   if (a === b) return 0;
+   return a < b ? 1 : -1;
+@@ -22,3 +26,8 @@ export function compareWorks(a: Work, b: Work): number {
+ export function sortWorks(works: readonly Work[]): Work[] {
+   return [...works].sort(compareWorks);
+ }
++
++// 대표작 영역은 수상작을 먼저 보여 주고, 그 안에서는 기존 순서를 따른다.
++export function sortFeatured(works: readonly Work[]): Work[] {
++  return [...works].sort((a, b) => Number(isAwarded(b)) - Number(isAwarded(a)) || compareWorks(a, b));
++}
+diff --git a/src/pages/admin/index.astro b/src/pages/admin/index.astro
+index 7cb30cb..9034f27 100644
+--- a/src/pages/admin/index.astro
++++ b/src/pages/admin/index.astro
+@@ -8,6 +8,7 @@ import { fileUrl } from "../../lib/files/types";
+ import { cleanupStaleUploads } from "../../lib/files/uploads";
+ import { formatDate } from "../../lib/format";
+ import { sortDateOf } from "../../lib/works/sort";
++import { DEV_METHOD_LABELS } from "../../lib/types";
+ 
+ await cleanupStaleUploads(env.DB, env.FILES, new Date());
+ const [works, fileCounts, covers, used] = await Promise.all([
+@@ -46,6 +47,7 @@ const deleted = Astro.url.searchParams.get("deleted") === "1";
+                 {work.isFeatured && <span class="status status-featured">대표작</span>}
+                 <span>{formatDate(sortDateOf(work))}</span>
+                 <span>{work.fields.join(", ")}</span>
++                {work.devMethod && <span>{DEV_METHOD_LABELS[work.devMethod]}</span>}
+               </div>
+               </div>
+             </div>
+diff --git a/src/pages/index.astro b/src/pages/index.astro
+index 602550e..4d991be 100644
+--- a/src/pages/index.astro
++++ b/src/pages/index.astro
+@@ -9,6 +9,7 @@ import { getAvatar, listCoversByWork } from "../lib/db/files";
+ import { getProfile } from "../lib/db/profile";
+ import { listPublicWorks } from "../lib/db/works";
+ import { fileUrl } from "../lib/files/types";
++import { sortFeatured } from "../lib/works/sort";
+ import { applyFilters, emptyStateMessage, filterOptions, hasActiveFilters, parseFilters } from "../lib/works/filter";
+ 
+ const [profile, works, covers, avatar] = await Promise.all([
+@@ -22,7 +23,7 @@ const coverFor = (workId: string, variant: "main" | "thumb") => {
+   return cover ? fileUrl(cover, variant) : null;
+ };
+ const filters = parseFilters(Astro.url.searchParams);
+-const featured = works.filter((work) => work.isFeatured);
++const featured = sortFeatured(works.filter((work) => work.isFeatured));
+ const visible = applyFilters(works, filters);
+ const options = filterOptions(works);
+ const description = profile.headline ?? `${profile.name}의 작업과 수상 기록을 모은 포트폴리오`;
+@@ -51,7 +52,7 @@ const description = profile.headline ?? `${profile.name}의 작업과 수상 기
+     <section id="works" class="section container" aria-labelledby="works-title">
+       <div class="section-head">
+         <h2 id="works-title" class="section-title">전체 작품 <span class="count">{visible.length}</span></h2>
+-        {works.length > 0 && <FilterBar filters={filters} fields={options.fields} years={options.years} />}
++        {works.length > 0 && <FilterBar filters={filters} fields={options.fields} years={options.years} methods={options.methods} />}
+       </div>
+       {
+         visible.length > 0 ? (
+diff --git a/src/pages/works/[slug].astro b/src/pages/works/[slug].astro
+index 1ea003d..4c4939e 100644
+--- a/src/pages/works/[slug].astro
++++ b/src/pages/works/[slug].astro
+@@ -1,6 +1,7 @@
+ ---
+ import { env } from "cloudflare:workers";
+ import AttachmentList from "../../components/AttachmentList.astro";
++import DevMethodBadge from "../../components/DevMethodBadge.astro";
+ import Gallery from "../../components/Gallery.astro";
+ import BaseLayout from "../../layouts/BaseLayout.astro";
+ import { getProfile } from "../../lib/db/profile";
+@@ -57,7 +58,10 @@ const videos = work.links.flatMap((link) => {
+     }
+     <a class="back" href="/#works">← 전체 작품</a>
+     <header class="head">
+-      <ul class="tags">{work.fields.map((field) => <li class="tag">{field}</li>)}</ul>
++      <ul class="tags">
++        {work.devMethod && <li><DevMethodBadge method={work.devMethod} /></li>}
++        {work.fields.map((field) => <li class="tag">{field}</li>)}
++      </ul>
+       <h1>{work.title}</h1>
+       {work.summary && <p class="lead">{work.summary}</p>}
+       {isAwarded(work) && <p class="badge-award">{work.award}</p>}
+diff --git a/src/styles/global.css b/src/styles/global.css
+index 8b92eb0..71d5ac2 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -6,6 +6,7 @@
+   --muted: #6b7280;
+   --line: #e6e8ec;
+   --accent: #3354e0;
++  --accent-soft: #eef1fd;
+   --award: #a4520a;
+   --award-soft: #fff4e5;
+   --radius: 16px;
+@@ -92,6 +93,25 @@ img {
+   font-weight: 600;
+ }
+ 
++.badge-method {
++  display: inline-flex;
++  align-items: center;
++  padding: 2px 10px;
++  border-radius: 999px;
++  font-size: 13px;
++  font-weight: 700;
++}
++
++.badge-method-hand {
++  background: var(--accent);
++  color: #fff;
++}
++
++.badge-method-ai {
++  background: var(--accent-soft);
++  color: var(--accent);
++}
++
+ .badge-award {
+   display: inline-flex;
+   align-items: center;
+diff --git a/test/db/adminWorks.test.ts b/test/db/adminWorks.test.ts
+index b4b4bf6..90cf58d 100644
+--- a/test/db/adminWorks.test.ts
++++ b/test/db/adminWorks.test.ts
+@@ -34,6 +34,7 @@ const draft = (overrides: Partial<WorkDraft> = {}): WorkDraft => ({
+   teamType: "team",
+   teamSize: 3,
+   role: "개발",
++  devMethod: "ai",
+   ...overrides,
+ });
+ 
+diff --git a/test/files/group.test.ts b/test/files/group.test.ts
+index 4490c58..c9e1eab 100644
+--- a/test/files/group.test.ts
++++ b/test/files/group.test.ts
+@@ -9,7 +9,7 @@ const view = (name: string, relativePath: string): FileView => ({
+   relativePath,
+   sizeBytes: 1,
+   url: `/files/${name}/${name}`,
+-  thumbUrl: null,
++  thumbUrl: null, viewUrl: null,
+ });
+ 
+ describe("groupAttachments", () => {
+diff --git a/test/files/serve.test.ts b/test/files/serve.test.ts
+index 8cd52a3..dacbc21 100644
+--- a/test/files/serve.test.ts
++++ b/test/files/serve.test.ts
+@@ -1,12 +1,13 @@
+ import { env } from "cloudflare:workers";
+ import { beforeEach, describe, expect, it } from "vitest";
+ import { contentDisposition, serveFile } from "../../src/lib/files/serve";
++import { isViewableType, toFileView } from "../../src/lib/files/types";
+ import { insertWorkRow, resetDb } from "../helpers/db";
+ import { makeWorkRow } from "../helpers/factories";
+ import { putCompleteFile, resetBucket } from "../helpers/files";
+ 
+-const request = (id: string, init: { thumb?: boolean; range?: string } = {}) =>
+-  new Request(`https://example.com/files/${id}/x${init.thumb ? "?v=thumb" : ""}`, {
++const request = (id: string, init: { thumb?: boolean; view?: boolean; range?: string } = {}) =>
++  new Request(`https://example.com/files/${id}/x${init.thumb ? "?v=thumb" : init.view ? "?v=view" : ""}`, {
+     headers: init.range ? { Range: init.range } : {},
+   });
+ 
+@@ -67,6 +68,52 @@ describe("serveFile", () => {
+   });
+ });
+ 
++describe("바로 보기", () => {
++  it("PDF 첨부는 ?v=view에서 inline으로 주고, 보안 머리글은 그대로 둔다", async () => {
++    const file = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name: "대회.pdf", body: "PDF", contentType: "application/pdf" });
++    const res = await serveFile(env.DB, env.FILES, request(file.id, { view: true }), file.id, false);
++    expect(res.status).toBe(200);
++    expect(res.headers.get("Content-Disposition")).toMatch(/^inline;/);
++    expect(res.headers.get("Content-Type")).toBe("application/pdf");
++    expect(res.headers.get("Content-Security-Policy")).toBe("default-src 'none'; sandbox");
++    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
++    await res.body?.cancel();
++  });
++
++  it("허용하지 않은 형식은 ?v=view여도 내려받기로 준다", async () => {
++    for (const [name, contentType] of [["계획.hwp", "application/x-hwp"], ["a.html", "text/html"], ["a.svg", "image/svg+xml"]] as const) {
++      const file = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name, body: "x", contentType });
++      const res = await serveFile(env.DB, env.FILES, request(file.id, { view: true }), file.id, false);
++      expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
++      await res.body?.cancel();
++    }
++  });
++
++  it("주소에 ?v=view가 없으면 PDF도 내려받기로 준다", async () => {
++    const file = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name: "a.pdf", body: "PDF", contentType: "application/pdf" });
++    const res = await serveFile(env.DB, env.FILES, request(file.id), file.id, false);
++    expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
++    await res.body?.cancel();
++  });
++
++  it("비공개 작품의 파일은 ?v=view여도 방문자에게 404", async () => {
++    const file = await putCompleteFile(env.DB, env.FILES, { workId: "priv", kind: "attachment", name: "a.pdf", body: "PDF", contentType: "application/pdf" });
++    const res = await serveFile(env.DB, env.FILES, request(file.id, { view: true }), file.id, false);
++    expect(res.status).toBe(404);
++  });
++
++  it("보기 주소는 허용한 형식의 첨부파일에만 만든다", async () => {
++    const pdf = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name: "a.pdf", body: "x", contentType: "application/pdf" });
++    const hwp = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name: "a.hwp", body: "x", contentType: "application/x-hwp" });
++    const cover = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "cover", name: "a.webp", body: "x", contentType: "image/webp" });
++    expect(toFileView(pdf).viewUrl).toBe(`/files/${pdf.id}/a.pdf?v=view`);
++    expect(toFileView(hwp).viewUrl).toBeNull();
++    expect(toFileView(cover).viewUrl).toBeNull();
++    expect(isViewableType(" Application/PDF ")).toBe(true);
++    expect(isViewableType("image/svg+xml")).toBe(false);
++  });
++});
++
+ describe("contentDisposition", () => {
+   it("이미지는 inline, 첨부는 attachment", () => {
+     expect(contentDisposition("cover", "a.png")).toBe("inline; filename=\"a.png\"; filename*=UTF-8''a.png");
+diff --git a/test/helpers/factories.ts b/test/helpers/factories.ts
+index 5a1a57c..6e2d148 100644
+--- a/test/helpers/factories.ts
++++ b/test/helpers/factories.ts
+@@ -23,6 +23,7 @@ export function makeWorkRow(overrides: Partial<WorkRow> = {}): WorkRow {
+     team_type: null,
+     team_size: null,
+     role: null,
++    dev_method: null,
+     is_public: 1,
+     is_featured: 0,
+     created_at: "2025-01-01T00:00:00.000Z",
+@@ -51,6 +52,7 @@ export function makeWork(overrides: Partial<Work> = {}): Work {
+     teamType: null,
+     teamSize: null,
+     role: null,
++    devMethod: null,
+     isPublic: true,
+     isFeatured: false,
+     createdAt: "2025-01-01T00:00:00.000Z",
+diff --git a/test/lib/filter.test.ts b/test/lib/filter.test.ts
+index bd0beab..8fe0630 100644
+--- a/test/lib/filter.test.ts
++++ b/test/lib/filter.test.ts
+@@ -9,7 +9,7 @@ import {
+ } from "../../src/lib/works/filter";
+ import { makeWork } from "../helpers/factories";
+ 
+-const NO_FILTERS = { field: null, year: null, award: false };
++const NO_FILTERS = { field: null, year: null, award: false, method: null };
+ const slugs = (works: Work[]) => works.map((work) => work.slug);
+ 
+ describe("parseFilters", () => {
+@@ -18,9 +18,16 @@ describe("parseFilters", () => {
+       field: "디자인",
+       year: 2025,
+       award: true,
++      method: null,
+     });
+   });
+ 
++  it("개발 방식을 읽고 잘못된 값은 무시한다", () => {
++    expect(parseFilters(new URLSearchParams("method=hand")).method).toBe("hand");
++    expect(parseFilters(new URLSearchParams("method=ai")).method).toBe("ai");
++    expect(parseFilters(new URLSearchParams("method=vibe")).method).toBeNull();
++  });
++
+   it("잘못된 값은 무시한다", () => {
+     expect(parseFilters(new URLSearchParams("field=%20%20&year=abcd&award=true"))).toEqual(NO_FILTERS);
+     expect(parseFilters(new URLSearchParams("year=20255")).year).toBeNull();
+@@ -29,8 +36,8 @@ describe("parseFilters", () => {
+ });
+ 
+ describe("applyFilters", () => {
+-  const dev = makeWork({ slug: "dev", fields: ["개발"], participatedOn: "2025-03-01", award: "대상" });
+-  const design = makeWork({ slug: "design", fields: ["디자인", "기획"], participatedOn: "2024-05-01" });
++  const dev = makeWork({ slug: "dev", fields: ["개발"], participatedOn: "2025-03-01", award: "대상", devMethod: "hand" });
++  const design = makeWork({ slug: "design", fields: ["디자인", "기획"], participatedOn: "2024-05-01", devMethod: "ai" });
+   const both = makeWork({ slug: "both", fields: ["개발", "기획"], periodStart: "2024-10-01", award: "  " });
+   const all = [dev, design, both];
+ 
+@@ -50,12 +57,22 @@ describe("applyFilters", () => {
+     expect(slugs(applyFilters(all, { ...NO_FILTERS, award: true }))).toEqual(["dev"]);
+   });
+ 
++  it("개발 방식으로 거르고, 값이 없는 작품은 빠진다", () => {
++    expect(slugs(applyFilters(all, { ...NO_FILTERS, method: "hand" }))).toEqual(["dev"]);
++    expect(slugs(applyFilters(all, { ...NO_FILTERS, method: "ai" }))).toEqual(["design"]);
++  });
++
+   it("조건을 함께 적용한다", () => {
+-    expect(slugs(applyFilters(all, { field: "개발", year: 2024, award: false }))).toEqual(["both"]);
++    expect(slugs(applyFilters(all, { ...NO_FILTERS, field: "개발", year: 2024 }))).toEqual(["both"]);
+   });
+ 
+   it("선택지는 분야 가나다순, 연도 최신순으로 중복 없이 만든다", () => {
+-    expect(filterOptions(all)).toEqual({ fields: ["개발", "기획", "디자인"], years: [2025, 2024] });
++    expect(filterOptions(all)).toEqual({ fields: ["개발", "기획", "디자인"], years: [2025, 2024], methods: ["hand", "ai"] });
++  });
++
++  it("개발 방식 선택지는 실제로 있는 값만 만든다", () => {
++    expect(filterOptions([both]).methods).toEqual([]);
++    expect(filterOptions([design, both]).methods).toEqual(["ai"]);
+   });
+ });
+ 
+@@ -63,6 +80,7 @@ describe("hasActiveFilters", () => {
+   it("하나라도 있으면 true", () => {
+     expect(hasActiveFilters(NO_FILTERS)).toBe(false);
+     expect(hasActiveFilters({ ...NO_FILTERS, award: true })).toBe(true);
++    expect(hasActiveFilters({ ...NO_FILTERS, method: "ai" })).toBe(true);
+   });
+ });
+ 
+diff --git a/test/lib/sort.test.ts b/test/lib/sort.test.ts
+index 2031d5c..c84b84d 100644
+--- a/test/lib/sort.test.ts
++++ b/test/lib/sort.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, expect, it } from "vitest";
+-import { sortDateOf, sortWorks, yearOf } from "../../src/lib/works/sort";
++import { sortDateOf, sortFeatured, sortWorks, yearOf } from "../../src/lib/works/sort";
+ import { makeWork } from "../helpers/factories";
+ 
+ describe("sortDateOf", () => {
+@@ -22,6 +22,16 @@ describe("yearOf", () => {
+   });
+ });
+ 
++describe("sortFeatured", () => {
++  it("수상작을 먼저, 그 안에서는 정렬 날짜 최신순", () => {
++    const newest = makeWork({ slug: "newest", participatedOn: "2026-10-01" });
++    const award = makeWork({ slug: "award", participatedOn: "2026-04-01", award: "금상" });
++    const oldAward = makeWork({ slug: "old-award", participatedOn: "2025-04-01", award: "은상" });
++    const blank = makeWork({ slug: "blank", participatedOn: "2026-01-01", award: "  " });
++    expect(sortFeatured([oldAward, blank, newest, award]).map((work) => work.slug)).toEqual(["award", "old-award", "newest", "blank"]);
++  });
++});
++
+ describe("sortWorks", () => {
+   it("정렬 날짜 최신순, 같으면 등록일 최신순", () => {
+     const a = makeWork({ slug: "a", participatedOn: "2024-01-01" });
+diff --git a/test/validate/work.test.ts b/test/validate/work.test.ts
+index 83e72ed..028eb48 100644
+--- a/test/validate/work.test.ts
++++ b/test/validate/work.test.ts
+@@ -36,6 +36,7 @@ describe("validateWorkInput", () => {
+         teamType: null,
+         teamSize: null,
+         role: null,
++        devMethod: null,
+       },
+     });
+   });
+@@ -91,6 +92,27 @@ describe("validateWorkInput", () => {
+   });
+ });
+ 
++describe("개발 방식", () => {
++  const draftOf = (devMethod: unknown) => {
++    const result = validateWorkInput({ ...valid, devMethod });
++    if (!result.ok) throw new Error("검증 실패");
++    return result.value.devMethod;
++  };
++
++  it("직접 코딩과 AI 협업을 받고, 그 밖의 값은 비운다", () => {
++    expect(draftOf("hand")).toBe("hand");
++    expect(draftOf("ai")).toBe("ai");
++    expect(draftOf("")).toBeNull();
++    expect(draftOf("vibe")).toBeNull();
++    expect(draftOf(undefined)).toBeNull();
++  });
++
++  it("폼 값으로 되돌릴 수 있다", () => {
++    expect(workToInput(makeWork({ devMethod: "hand" })).devMethod).toBe("hand");
++    expect(workToInput(makeWork({ devMethod: null })).devMethod).toBe("");
++  });
++});
++
+ describe("workToInput", () => {
+   it("작품을 폼 값으로 바꾼다", () => {
+     const input = workToInput(makeWork({ title: "제목", teamType: "team", teamSize: 3, award: null }));
