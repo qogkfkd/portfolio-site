@@ -4,7 +4,7 @@
 
 - 설계: `docs/superpowers/specs/2026-10-27-portfolio-site-design.md`
 - 구현 계획: `docs/superpowers/plans/`
-- 협업 규칙: `C:/Users/bhr46/.codex-collab/RULES.md`. 승인된 계획만 실행하고, 인계는 `collab/HANDOFF.md`에 쓴다.
+- 협업 규칙: `C:/Users/user/.codex-collab/RULES.md`. 승인된 계획만 실행하고, 인계는 `collab/HANDOFF.md`에 쓴다.
 
 ## 명령
 

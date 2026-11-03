@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **이 프로젝트의 실행 방식:** 협업 규칙(`C:/Users/bhr46/.codex-collab/RULES.md`)에 따라 Codex가 superpowers:executing-plans 방식으로 작업 1부터 7까지 순서대로 실행한다. 계획에 적힌 코드를 그대로 옮겨 적는다. 계획이 모호하거나 틀렸거나 같은 오류에 두 번 막히면 그 자리에서 멈추고 `collab/HANDOFF.md`에 적는다.
+> **이 프로젝트의 실행 방식:** 협업 규칙(`C:/Users/user/.codex-collab/RULES.md`)에 따라 Codex가 superpowers:executing-plans 방식으로 작업 1부터 7까지 순서대로 실행한다. 계획에 적힌 코드를 그대로 옮겨 적는다. 계획이 모호하거나 틀렸거나 같은 오류에 두 번 막히면 그 자리에서 멈추고 `collab/HANDOFF.md`에 적는다.
 
 **Goal:** 대표 이미지, 스크린샷 갤러리, 첨부 파일·폴더, 프로필 사진을 올리고 보여준다. 저장 공간 사용량도 보여준다.
 
@@ -195,7 +195,7 @@ export default defineConfig({
 
 - 설계: `docs/superpowers/specs/2026-10-27-portfolio-site-design.md`
 - 구현 계획: `docs/superpowers/plans/`
-- 협업 규칙: `C:/Users/bhr46/.codex-collab/RULES.md`. 승인된 계획만 실행하고, 인계는 `collab/HANDOFF.md`에 쓴다.
+- 협업 규칙: `C:/Users/user/.codex-collab/RULES.md`. 승인된 계획만 실행하고, 인계는 `collab/HANDOFF.md`에 쓴다.
 
 ## 명령
 
