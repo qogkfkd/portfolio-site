@@ -1,0 +1,67 @@
+---
+import { formatBytes } from "../lib/format";
+import { groupAttachments } from "../lib/files/group";
+import type { FileView } from "../lib/files/types";
+
+interface Props {
+  files: FileView[];
+}
+
+const groups = groupAttachments(Astro.props.files);
+---
+
+<div class="attachments">
+  {
+    groups.map((group) => (
+      <div class="group">
+        {group.folder && <p class="folder">{group.folder}</p>}
+        <ul>
+          {group.files.map((file) => (
+            <li>
+              <a href={file.url} download={file.name}>
+                {file.name}
+              </a>
+              <span class="size">{formatBytes(file.sizeBytes)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))
+  }
+</div>
+
+<style>
+  .attachments {
+    display: grid;
+    gap: 16px;
+  }
+  .folder {
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  ul {
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line);
+    list-style: none;
+  }
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  a {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .size {
+    color: var(--muted);
+    font-size: 14px;
+  }
+</style>

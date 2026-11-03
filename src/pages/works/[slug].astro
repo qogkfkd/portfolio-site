@@ -1,9 +1,13 @@
 ---
 import { env } from "cloudflare:workers";
+import AttachmentList from "../../components/AttachmentList.astro";
+import Gallery from "../../components/Gallery.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { getProfile } from "../../lib/db/profile";
 import { getWorkBySlug } from "../../lib/db/adminWorks";
+import { listWorkFiles } from "../../lib/db/files";
 import { getPublicWorkBySlug } from "../../lib/db/works";
+import { toFileView } from "../../lib/files/types";
 import { formatDate, formatPeriod, teamLabel } from "../../lib/format";
 import { sanitizeHtml } from "../../lib/html/sanitize";
 import { LINK_KIND_LABELS } from "../../lib/types";
@@ -24,6 +28,10 @@ if (!work) {
 
 const profile = await getProfile(env.DB);
 const descriptionHtml = await sanitizeHtml(work.descriptionHtml);
+const fileViews = (await listWorkFiles(env.DB, work.id)).map(toFileView);
+const cover = fileViews.find((file) => file.kind === "cover") ?? null;
+const gallery = fileViews.filter((file) => file.kind === "gallery");
+const attachments = fileViews.filter((file) => file.kind === "attachment");
 const facts = [
   { label: "대회", value: work.competition },
   { label: "주최", value: work.organizer },
@@ -38,7 +46,7 @@ const videos = work.links.flatMap((link) => {
 });
 ---
 
-<BaseLayout title={`${work.title} | ${profile.name}`} description={summaryOf(work)} ownerName={profile.name} noindex={preview}>
+<BaseLayout title={`${work.title} | ${profile.name}`} description={summaryOf(work)} ownerName={profile.name} noindex={preview} image={cover?.url ?? null}>
   <main class="container detail">
     {
       preview && (
@@ -54,6 +62,8 @@ const videos = work.links.flatMap((link) => {
       {work.summary && <p class="lead">{work.summary}</p>}
       {isAwarded(work) && <p class="badge-award">{work.award}</p>}
     </header>
+
+    {cover && <img class="cover-image" src={cover.url} alt={`${work.title} 대표 이미지`} />}
 
     {
       facts.length > 0 && (
@@ -101,6 +111,15 @@ const videos = work.links.flatMap((link) => {
     </section>
 
     {
+      gallery.length > 0 && (
+        <section class="block">
+          <h2>스크린샷</h2>
+          <Gallery images={gallery} title={work.title} />
+        </section>
+      )
+    }
+
+    {
       videos.length > 0 && (
         <section class="block">
           <h2>영상</h2>
@@ -116,6 +135,14 @@ const videos = work.links.flatMap((link) => {
               />
             </div>
           ))}
+        </section>
+      )
+    }
+    {
+      attachments.length > 0 && (
+        <section class="block">
+          <h2>첨부 파일</h2>
+          <AttachmentList files={attachments} />
         </section>
       )
     }
@@ -161,6 +188,15 @@ const videos = work.links.flatMap((link) => {
   }
   .head .badge-award {
     justify-self: start;
+  }
+  .cover-image {
+    width: 100%;
+    max-height: 520px;
+    margin-top: 32px;
+    object-fit: cover;
+    object-position: top;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
   }
   .facts {
     display: grid;

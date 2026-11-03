@@ -5,11 +5,22 @@ import FilterBar from "../components/FilterBar.astro";
 import ProfileHero from "../components/ProfileHero.astro";
 import WorkCard from "../components/WorkCard.astro";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { getAvatar, listCoversByWork } from "../lib/db/files";
 import { getProfile } from "../lib/db/profile";
 import { listPublicWorks } from "../lib/db/works";
+import { fileUrl } from "../lib/files/types";
 import { applyFilters, emptyStateMessage, filterOptions, hasActiveFilters, parseFilters } from "../lib/works/filter";
 
-const [profile, works] = await Promise.all([getProfile(env.DB), listPublicWorks(env.DB)]);
+const [profile, works, covers, avatar] = await Promise.all([
+  getProfile(env.DB),
+  listPublicWorks(env.DB),
+  listCoversByWork(env.DB),
+  getAvatar(env.DB),
+]);
+const coverFor = (workId: string, variant: "main" | "thumb") => {
+  const cover = covers.get(workId);
+  return cover ? fileUrl(cover, variant) : null;
+};
 const filters = parseFilters(Astro.url.searchParams);
 const featured = works.filter((work) => work.isFeatured);
 const visible = applyFilters(works, filters);
@@ -17,8 +28,13 @@ const options = filterOptions(works);
 const description = profile.headline ?? `${profile.name}의 작업과 수상 기록을 모은 포트폴리오`;
 ---
 
-<BaseLayout title={`${profile.name} | 포트폴리오`} description={description} ownerName={profile.name}>
-  <ProfileHero profile={profile} />
+<BaseLayout
+  title={`${profile.name} | 포트폴리오`}
+  description={description}
+  ownerName={profile.name}
+  image={avatar ? fileUrl(avatar) : null}
+>
+  <ProfileHero profile={profile} avatarUrl={avatar ? fileUrl(avatar, "thumb") : null} />
   <main>
     {
       featured.length > 0 && (
@@ -26,7 +42,7 @@ const description = profile.headline ?? `${profile.name}의 작업과 수상 기
           <h2 id="featured-title" class="section-title">대표작</h2>
           <div class="grid grid-featured">
             {featured.map((work) => (
-              <WorkCard work={work} list="featured" />
+              <WorkCard work={work} list="featured" coverUrl={coverFor(work.id, "main")} />
             ))}
           </div>
         </section>
@@ -41,7 +57,7 @@ const description = profile.headline ?? `${profile.name}의 작업과 수상 기
         visible.length > 0 ? (
           <div class="grid">
             {visible.map((work) => (
-              <WorkCard work={work} list="all" />
+              <WorkCard work={work} list="all" coverUrl={coverFor(work.id, "thumb")} />
             ))}
           </div>
         ) : (

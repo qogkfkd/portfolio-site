@@ -3,14 +3,16 @@ import type { Profile } from "../lib/types";
 
 interface Props {
   profile: Profile;
+  avatarUrl?: string | null;
 }
 
-const { profile } = Astro.props;
+const { profile, avatarUrl = null } = Astro.props;
 const hasContacts = profile.email !== null || profile.githubUrl !== null || profile.links.length > 0;
 ---
 
 <header class="hero">
   <div class="container">
+    {avatarUrl && <img class="avatar" src={avatarUrl} alt={`${profile.name} 프로필 사진`} />}
     <p class="eyebrow">Portfolio</p>
     <h1>{profile.name}</h1>
     {profile.headline && <p class="headline">{profile.headline}</p>}
@@ -42,6 +44,14 @@ const hasContacts = profile.email !== null || profile.githubUrl !== null || prof
 <style>
   .hero {
     padding: 96px 0 24px;
+  }
+  .avatar {
+    width: 96px;
+    height: 96px;
+    margin-bottom: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--surface);
   }
   .eyebrow {
     margin-bottom: 16px;

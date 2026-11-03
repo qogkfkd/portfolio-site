@@ -1,0 +1,99 @@
+---
+import type { FileView } from "../lib/files/types";
+
+interface Props {
+  images: FileView[];
+  title: string;
+}
+
+const { images, title } = Astro.props;
+---
+
+<div class="gallery" data-gallery>
+  {
+    images.map((image, index) => (
+      <a class="gallery-item" href={image.url} target="_blank" rel="noopener">
+        <img src={image.thumbUrl ?? image.url} alt={`${title} 스크린샷 ${index + 1}`} loading="lazy" />
+      </a>
+    ))
+  }
+</div>
+<dialog class="lightbox" data-lightbox>
+  <img alt="" />
+  <button type="button" class="lightbox-close" aria-label="닫기">×</button>
+</dialog>
+
+<script>
+  // 스크립트가 없으면 링크가 원본 이미지를 새 탭에서 연다.
+  const dialog = document.querySelector<HTMLDialogElement>("[data-lightbox]");
+  const big = dialog?.querySelector("img");
+  for (const link of document.querySelectorAll<HTMLAnchorElement>("[data-gallery] .gallery-item")) {
+    link.addEventListener("click", (event) => {
+      if (!dialog || !big) return;
+      event.preventDefault();
+      big.src = link.href;
+      big.alt = link.querySelector("img")?.alt ?? "";
+      dialog.showModal();
+    });
+  }
+  dialog?.addEventListener("click", (event) => {
+    if (event.target === dialog || (event.target as HTMLElement).closest(".lightbox-close")) dialog.close();
+  });
+</script>
+
+<style>
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: 12px;
+  }
+  .gallery-item {
+    display: block;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .gallery-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.2s ease;
+  }
+  .gallery-item:hover img {
+    transform: scale(1.03);
+  }
+  .lightbox {
+    max-width: min(96vw, 1400px);
+    max-height: 92vh;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+  }
+  .lightbox::backdrop {
+    background: rgba(10, 12, 16, 0.85);
+  }
+  .lightbox img {
+    display: block;
+    max-width: 100%;
+    max-height: 92vh;
+    margin: 0 auto;
+    border-radius: var(--radius);
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--ink);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+  }
+</style>
