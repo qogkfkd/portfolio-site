@@ -1,4 +1,4 @@
-import { LINK_KINDS, type LinkKind, type Profile, type ProfileLink, type TeamType, type Work, type WorkLink } from "../types";
+import { LINK_KINDS, isDevMethod, type LinkKind, type Profile, type ProfileLink, type TeamType, type Work, type WorkLink } from "../types";
 
 export interface WorkRow {
   id: string;
@@ -18,6 +18,7 @@ export interface WorkRow {
   team_type: string | null;
   team_size: number | null;
   role: string | null;
+  dev_method: string | null;
   is_public: number;
   is_featured: number;
   created_at: string;
@@ -111,6 +112,7 @@ export function rowToWork(row: WorkRow): Work {
     teamType,
     teamSize: teamType === "team" ? row.team_size : null,
     role: emptyToNull(row.role),
+    devMethod: isDevMethod(row.dev_method) ? row.dev_method : null,
     isPublic: row.is_public === 1,
     isFeatured: row.is_featured === 1,
     createdAt: row.created_at,

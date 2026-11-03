@@ -1,13 +1,13 @@
 import { getWorkById } from "../db/adminWorks";
 import { getFile } from "../db/files";
 import { parseRange } from "./range";
-import type { FileKind } from "./types";
+import { isViewableType, type FileKind } from "./types";
 
 // RFC 5987: 한글 파일명은 filename*=UTF-8''로 보내고, 옛 브라우저용 filename에는 ASCII만 남긴다.
-export function contentDisposition(kind: FileKind, name: string): string {
+export function contentDisposition(kind: FileKind, name: string, view = false): string {
   const encoded = encodeURIComponent(name).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
   const ascii = name.replace(/[^\x20-\x7e]|["\\]/g, "_");
-  return `${kind === "attachment" ? "attachment" : "inline"}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+  return `${kind === "attachment" && !view ? "attachment" : "inline"}; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
 function notFound(): Response {
@@ -31,11 +31,14 @@ export async function serveFile(
   }
   if (!isPublic && !isAdmin) return notFound();
 
-  const key = new URL(request.url).searchParams.get("v") === "thumb" ? (file.thumbR2Key ?? file.r2Key) : file.r2Key;
+  const variant = new URL(request.url).searchParams.get("v");
+  const key = variant === "thumb" ? (file.thumbR2Key ?? file.r2Key) : file.r2Key;
+  // 허용한 형식의 첨부파일만 바로 보여 준다. 보안 머리글은 내려받을 때와 같다.
+  const view = variant === "view" && isViewableType(file.contentType);
   const headers = new Headers({
     "Accept-Ranges": "bytes",
     "Cache-Control": isPublic ? "public, max-age=86400" : "private, no-store",
-    "Content-Disposition": contentDisposition(file.kind, file.originalName),
+    "Content-Disposition": contentDisposition(file.kind, file.originalName, view),
     "X-Content-Type-Options": "nosniff",
   });
   if (file.kind === "attachment") headers.set("Content-Security-Policy", "default-src 'none'; sandbox");

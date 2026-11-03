@@ -16,10 +16,10 @@ export async function login(page: Page): Promise<void> {
 }
 
 // 새 작품을 저장하고 수정 화면에 머문다.
-export async function createWork(page: Page, title: string): Promise<CreatedWork> {
+export async function createWork(page: Page, title: string, field = "E2E분야"): Promise<CreatedWork> {
   await page.goto("/admin/works/new");
   await page.locator("#title").fill(title);
-  await page.locator("#fields").fill("E2E분야");
+  await page.locator("#fields").fill(field);
   await page.locator("#fields").press("Enter");
   await page.locator(".ProseMirror").click();
   await page.keyboard.type("E2E 시험용 설명입니다.");

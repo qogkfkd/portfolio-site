@@ -1,22 +1,22 @@
-import type { Work, WorkFilters } from "../types";
-import { yearOf } from "./sort";
+import { DEV_METHODS, isDevMethod, type DevMethod, type Work, type WorkFilters } from "../types";
+import { isAwarded, yearOf } from "./sort";
+
+export { isAwarded };
 
 export function parseFilters(params: URLSearchParams): WorkFilters {
   const field = params.get("field")?.trim() ?? "";
   const year = params.get("year")?.trim() ?? "";
+  const method = params.get("method")?.trim();
   return {
     field: field === "" ? null : field,
     year: /^\d{4}$/.test(year) ? Number(year) : null,
     award: params.get("award") === "1",
+    method: isDevMethod(method) ? method : null,
   };
 }
 
 export function hasActiveFilters(filters: WorkFilters): boolean {
-  return filters.field !== null || filters.year !== null || filters.award;
-}
-
-export function isAwarded(work: Pick<Work, "award">): boolean {
-  return work.award !== null && work.award.trim() !== "";
+  return filters.field !== null || filters.year !== null || filters.award || filters.method !== null;
 }
 
 export function applyFilters(works: readonly Work[], filters: WorkFilters): Work[] {
@@ -24,14 +24,16 @@ export function applyFilters(works: readonly Work[], filters: WorkFilters): Work
     (work) =>
       (filters.field === null || work.fields.includes(filters.field)) &&
       (filters.year === null || yearOf(work) === filters.year) &&
-      (!filters.award || isAwarded(work)),
+      (!filters.award || isAwarded(work)) &&
+      (filters.method === null || work.devMethod === filters.method),
   );
 }
 
-export function filterOptions(works: readonly Work[]): { fields: string[]; years: number[] } {
+export function filterOptions(works: readonly Work[]): { fields: string[]; years: number[]; methods: DevMethod[] } {
   const fields = [...new Set(works.flatMap((work) => work.fields))].sort((a, b) => a.localeCompare(b, "ko"));
   const years = [...new Set(works.map(yearOf))].sort((a, b) => b - a);
-  return { fields, years };
+  const methods = DEV_METHODS.filter((method) => works.some((work) => work.devMethod === method));
+  return { fields, years, methods };
 }
 
 export function emptyStateMessage(totalPublic: number, filters: WorkFilters): string {

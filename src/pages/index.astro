@@ -9,6 +9,7 @@ import { getAvatar, listCoversByWork } from "../lib/db/files";
 import { getProfile } from "../lib/db/profile";
 import { listPublicWorks } from "../lib/db/works";
 import { fileUrl } from "../lib/files/types";
+import { sortFeatured } from "../lib/works/sort";
 import { applyFilters, emptyStateMessage, filterOptions, hasActiveFilters, parseFilters } from "../lib/works/filter";
 
 const [profile, works, covers, avatar] = await Promise.all([
@@ -22,7 +23,7 @@ const coverFor = (workId: string, variant: "main" | "thumb") => {
   return cover ? fileUrl(cover, variant) : null;
 };
 const filters = parseFilters(Astro.url.searchParams);
-const featured = works.filter((work) => work.isFeatured);
+const featured = sortFeatured(works.filter((work) => work.isFeatured));
 const visible = applyFilters(works, filters);
 const options = filterOptions(works);
 const description = profile.headline ?? `${profile.name}의 작업과 수상 기록을 모은 포트폴리오`;
@@ -51,7 +52,7 @@ const description = profile.headline ?? `${profile.name}의 작업과 수상 기
     <section id="works" class="section container" aria-labelledby="works-title">
       <div class="section-head">
         <h2 id="works-title" class="section-title">전체 작품 <span class="count">{visible.length}</span></h2>
-        {works.length > 0 && <FilterBar filters={filters} fields={options.fields} years={options.years} />}
+        {works.length > 0 && <FilterBar filters={filters} fields={options.fields} years={options.years} methods={options.methods} />}
       </div>
       {
         visible.length > 0 ? (

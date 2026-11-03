@@ -6,6 +6,7 @@
   --muted: #6b7280;
   --line: #e6e8ec;
   --accent: #3354e0;
+  --accent-soft: #eef1fd;
   --award: #a4520a;
   --award-soft: #fff4e5;
   --radius: 16px;
@@ -90,6 +91,25 @@ img {
   color: var(--body);
   font-size: 13px;
   font-weight: 600;
+}
+
+.badge-method {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.badge-method-hand {
+  background: var(--accent);
+  color: #fff;
+}
+
+.badge-method-ai {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .badge-award {

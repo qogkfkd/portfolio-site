@@ -21,7 +21,14 @@ const groups = groupAttachments(Astro.props.files);
               <a href={file.url} download={file.name}>
                 {file.name}
               </a>
-              <span class="size">{formatBytes(file.sizeBytes)}</span>
+              <span class="side">
+                {file.viewUrl && (
+                  <a class="view" href={file.viewUrl} target="_blank" rel="noopener" aria-label={`${file.name} 보기`}>
+                    보기
+                  </a>
+                )}
+                <span class="size">{formatBytes(file.sizeBytes)}</span>
+              </span>
             </li>
           ))}
         </ul>
@@ -59,6 +66,14 @@ const groups = groupAttachments(Astro.props.files);
   a {
     color: var(--accent);
     font-weight: 600;
+  }
+  .side {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .view {
+    font-size: 14px;
   }
   .size {
     color: var(--muted);

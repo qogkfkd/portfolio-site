@@ -1,5 +1,5 @@
 import { isHttpUrl } from "../db/rows";
-import { LINK_KINDS, type LinkKind, type TeamType, type Work, type WorkLink } from "../types";
+import { LINK_KINDS, isDevMethod, type DevMethod, type LinkKind, type TeamType, type Work, type WorkLink } from "../types";
 import { isValidSlug } from "../works/slug";
 import { SUMMARY_MAX, stripHtml } from "../works/summary";
 import { URL_MESSAGE, charCount, isIsoDate, nullable, record, tagList, text, type FieldErrors, type Validation } from "./common";
@@ -29,6 +29,7 @@ export interface WorkInput {
   teamType: "" | TeamType;
   teamSize: string;
   role: string;
+  devMethod: "" | DevMethod;
 }
 
 export interface WorkDraft {
@@ -48,6 +49,7 @@ export interface WorkDraft {
   teamType: TeamType | null;
   teamSize: number | null;
   role: string | null;
+  devMethod: DevMethod | null;
 }
 
 export const EMPTY_WORK_INPUT: WorkInput = {
@@ -67,6 +69,7 @@ export const EMPTY_WORK_INPUT: WorkInput = {
   teamType: "",
   teamSize: "",
   role: "",
+  devMethod: "",
 };
 
 export function workToInput(work: Work): WorkInput {
@@ -87,6 +90,7 @@ export function workToInput(work: Work): WorkInput {
     teamType: work.teamType ?? "",
     teamSize: work.teamSize === null ? "" : String(work.teamSize),
     role: work.role ?? "",
+    devMethod: work.devMethod ?? "",
   };
 }
 
@@ -147,6 +151,9 @@ export function validateWorkInput(raw: unknown): Validation<WorkDraft> {
     }
   }
 
+  const devMethodText = text(input.devMethod);
+  const devMethod = isDevMethod(devMethodText) ? devMethodText : null;
+
   const links: WorkLink[] = [];
   const rawLinks = Array.isArray(input.links) ? input.links : [];
   rawLinks.forEach((item, index) => {
@@ -186,6 +193,7 @@ export function validateWorkInput(raw: unknown): Validation<WorkDraft> {
       teamType,
       teamSize,
       role,
+      devMethod,
     },
   };
 }

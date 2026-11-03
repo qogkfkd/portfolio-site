@@ -1,6 +1,7 @@
 ---
 import { env } from "cloudflare:workers";
 import AttachmentList from "../../components/AttachmentList.astro";
+import DevMethodBadge from "../../components/DevMethodBadge.astro";
 import Gallery from "../../components/Gallery.astro";
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { getProfile } from "../../lib/db/profile";
@@ -57,7 +58,10 @@ const videos = work.links.flatMap((link) => {
     }
     <a class="back" href="/#works">← 전체 작품</a>
     <header class="head">
-      <ul class="tags">{work.fields.map((field) => <li class="tag">{field}</li>)}</ul>
+      <ul class="tags">
+        {work.devMethod && <li><DevMethodBadge method={work.devMethod} /></li>}
+        {work.fields.map((field) => <li class="tag">{field}</li>)}
+      </ul>
       <h1>{work.title}</h1>
       {work.summary && <p class="lead">{work.summary}</p>}
       {isAwarded(work) && <p class="badge-award">{work.award}</p>}

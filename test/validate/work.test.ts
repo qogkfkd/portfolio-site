@@ -36,6 +36,7 @@ describe("validateWorkInput", () => {
         teamType: null,
         teamSize: null,
         role: null,
+        devMethod: null,
       },
     });
   });
@@ -88,6 +89,27 @@ describe("validateWorkInput", () => {
     const ok = validateWorkInput({ ...valid, slug: " Brand-Identity " });
     expect(ok.ok && ok.value.slug).toBe("brand-identity");
     expect(errorsOf({ slug: "a/b" })).toEqual({ slug: "주소에는 소문자, 한글, 숫자와 하이픈(-)만 쓸 수 있어요." });
+  });
+});
+
+describe("개발 방식", () => {
+  const draftOf = (devMethod: unknown) => {
+    const result = validateWorkInput({ ...valid, devMethod });
+    if (!result.ok) throw new Error("검증 실패");
+    return result.value.devMethod;
+  };
+
+  it("직접 코딩과 AI 협업을 받고, 그 밖의 값은 비운다", () => {
+    expect(draftOf("hand")).toBe("hand");
+    expect(draftOf("ai")).toBe("ai");
+    expect(draftOf("")).toBeNull();
+    expect(draftOf("vibe")).toBeNull();
+    expect(draftOf(undefined)).toBeNull();
+  });
+
+  it("폼 값으로 되돌릴 수 있다", () => {
+    expect(workToInput(makeWork({ devMethod: "hand" })).devMethod).toBe("hand");
+    expect(workToInput(makeWork({ devMethod: null })).devMethod).toBe("");
   });
 });
 

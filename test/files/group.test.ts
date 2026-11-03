@@ -9,7 +9,7 @@ const view = (name: string, relativePath: string): FileView => ({
   relativePath,
   sizeBytes: 1,
   url: `/files/${name}/${name}`,
-  thumbUrl: null,
+  thumbUrl: null, viewUrl: null,
 });
 
 describe("groupAttachments", () => {

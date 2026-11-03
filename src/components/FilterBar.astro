@@ -1,17 +1,29 @@
 ---
-import type { WorkFilters } from "../lib/types";
+import { DEV_METHOD_LABELS, type DevMethod, type WorkFilters } from "../lib/types";
 import { hasActiveFilters } from "../lib/works/filter";
 
 interface Props {
   filters: WorkFilters;
   fields: string[];
   years: number[];
+  methods: DevMethod[];
 }
 
-const { filters, fields, years } = Astro.props;
+const { filters, fields, years, methods } = Astro.props;
 ---
 
 <form class="filters" method="get" action="/#works" data-filter-form>
+  {
+    methods.length > 0 && (
+      <label>
+        <span class="visually-hidden">개발 방식</span>
+        <select name="method">
+          <option value="">모든 개발 방식</option>
+          {methods.map((method) => <option value={method} selected={filters.method === method}>{DEV_METHOD_LABELS[method]}</option>)}
+        </select>
+      </label>
+    )
+  }
   <label>
     <span class="visually-hidden">분야</span>
     <select name="field">

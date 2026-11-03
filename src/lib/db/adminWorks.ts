@@ -27,6 +27,7 @@ function draftColumns(draft: WorkDraft) {
     team_type: draft.teamType,
     team_size: draft.teamSize,
     role: draft.role,
+    dev_method: draft.devMethod,
   };
 }
 

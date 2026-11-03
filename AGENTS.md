@@ -38,6 +38,8 @@
 - 비밀값(`ADMIN_PASSWORD_HASH`, `SESSION_SECRET`)은 코드나 `wrangler.jsonc`에 쓰지 않는다. 로컬은 `.dev.vars`, 운영은 `wrangler secret put`(4단계 안내서)으로 넣는다.
 - 파일 기능은 `src/lib/files/`에 있다. 업로드는 R2 멀티파트(10MiB 조각), 파일 제공은 `/files/{id}/{이름}`(썸네일은 `?v=thumb`)이다. 용량 상수는 `src/lib/files/rules.ts`에 있다.
 - R2도 같은 파일 안의 테스트끼리 격리되지 않는다. 파일 테스트는 `beforeEach`에서 `resetBucket(env.FILES)`도 부른다.
+- 작품의 개발 방식은 `dev_method`(`hand` 직접 코딩, `ai` AI 협업)이다. 배지는 `DevMethodBadge`, 걸러 보기 쿼리는 `method`다.
+- 첨부파일은 `?v=view`일 때 `VIEWABLE_TYPES`(`src/lib/files/types.ts`)만 브라우저에서 바로 보여 준다. svg와 html은 넣지 않는다.
 - 브라우저 시험은 `e2e/`에 있고 배포용 빌드를 포트 4400에 띄워 돈다. 시험 데이터는 제목을 `E2E `로 시작하고, 시험 앞뒤로 `e2e/cleanup.ts`가 지운다.
 - Codex 샌드박스에서는 `.git` 쓰기와 개발 서버 실행이 막혀 있다. 커밋, `npm run dev`, `npm run smoke`, `npm run e2e`는 Claude가 리뷰 때 샌드박스 밖에서 한다.
 - 배포(`wrangler deploy`, `npm run deploy`), 로그인(`wrangler login`), `--remote` 명령, `git push`는 Claude와 Codex가 하지 않는다. 사용자가 `docs/배포-안내.md`를 따라 직접 한다.

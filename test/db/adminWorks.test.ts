@@ -34,6 +34,7 @@ const draft = (overrides: Partial<WorkDraft> = {}): WorkDraft => ({
   teamType: "team",
   teamSize: 3,
   role: "개발",
+  devMethod: "ai",
   ...overrides,
 });
 

@@ -1,0 +1,11 @@
+---
+import { DEV_METHOD_LABELS, type DevMethod } from "../lib/types";
+
+interface Props {
+  method: DevMethod;
+}
+
+const { method } = Astro.props;
+---
+
+<span class:list={["badge-method", `badge-method-${method}`]}>{DEV_METHOD_LABELS[method]}</span>

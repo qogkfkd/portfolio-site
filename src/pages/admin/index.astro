@@ -8,6 +8,7 @@ import { fileUrl } from "../../lib/files/types";
 import { cleanupStaleUploads } from "../../lib/files/uploads";
 import { formatDate } from "../../lib/format";
 import { sortDateOf } from "../../lib/works/sort";
+import { DEV_METHOD_LABELS } from "../../lib/types";
 
 await cleanupStaleUploads(env.DB, env.FILES, new Date());
 const [works, fileCounts, covers, used] = await Promise.all([
@@ -46,6 +47,7 @@ const deleted = Astro.url.searchParams.get("deleted") === "1";
                 {work.isFeatured && <span class="status status-featured">대표작</span>}
                 <span>{formatDate(sortDateOf(work))}</span>
                 <span>{work.fields.join(", ")}</span>
+                {work.devMethod && <span>{DEV_METHOD_LABELS[work.devMethod]}</span>}
               </div>
               </div>
             </div>

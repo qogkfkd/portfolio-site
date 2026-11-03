@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortDateOf, sortWorks, yearOf } from "../../src/lib/works/sort";
+import { sortDateOf, sortFeatured, sortWorks, yearOf } from "../../src/lib/works/sort";
 import { makeWork } from "../helpers/factories";
 
 describe("sortDateOf", () => {
@@ -19,6 +19,16 @@ describe("sortDateOf", () => {
 describe("yearOf", () => {
   it("정렬 날짜의 연도를 돌려준다", () => {
     expect(yearOf(makeWork({ periodStart: "2024-09-01" }))).toBe(2024);
+  });
+});
+
+describe("sortFeatured", () => {
+  it("수상작을 먼저, 그 안에서는 정렬 날짜 최신순", () => {
+    const newest = makeWork({ slug: "newest", participatedOn: "2026-10-01" });
+    const award = makeWork({ slug: "award", participatedOn: "2026-04-01", award: "금상" });
+    const oldAward = makeWork({ slug: "old-award", participatedOn: "2025-04-01", award: "은상" });
+    const blank = makeWork({ slug: "blank", participatedOn: "2026-01-01", award: "  " });
+    expect(sortFeatured([oldAward, blank, newest, award]).map((work) => work.slug)).toEqual(["award", "old-award", "newest", "blank"]);
   });
 });
 

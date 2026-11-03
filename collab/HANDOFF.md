@@ -1,23 +1,16 @@
-# 4단계 작업 인계
+﻿# 작업 인계
 
-- 실행 계획: `docs/superpowers/plans/2026-11-03-stage4-finish-and-deploy-guide.md` (기준 `9132b38`, `main`).
-- 작업 1 완료: Playwright 설정, 브라우저 흐름·파일·화면 시험과 정리 도우미 작성.
-- 작업 2 완료: 배포 안내서, 대화형 비밀번호 해시 도구, 프로젝트 지침 작성.
-- 변경: `.gitignore`, `scripts/hash-password.mjs`, `AGENTS.md`, `collab/HANDOFF.md`.
-- 신규 미추적: `playwright.config.ts`, `e2e/cleanup.ts`, `e2e/global-setup.ts`, `e2e/helpers.ts`, `e2e/flows.spec.ts`, `e2e/files.spec.ts`, `e2e/layout.spec.ts`, `docs/배포-안내.md`.
-- 기존 미추적 파일 `.codex-collab.lock`, `collab/RESUME.md`, `docs/`의 PDF 3개는 건드리지 않았다.
+- 실행 계획: `docs/superpowers/plans/2026-11-03-work-classification.md` (사용자 승인). 기준 `main` / `13e8fd7`에서 패치를 그대로 적용했다.
+- 완료: 계획의 29개 파일 변경과 지정된 네 가지 검증. 남은 작업: Claude의 복제본 대조·리뷰, `npm run smoke`, `npm run e2e`, 커밋.
+- 변경 파일 29개: `AGENTS.md`, `README.md`, `e2e/helpers.ts`, `e2e/classify.spec.ts`(신규), `migrations/0002_dev_method.sql`(신규), `src/components/AttachmentList.astro`, `src/components/DevMethodBadge.astro`(신규), `src/components/FilterBar.astro`, `src/components/WorkCard.astro`, `src/components/admin/WorkForm.tsx`, `src/lib/db/adminWorks.ts`, `src/lib/db/rows.ts`, `src/lib/files/serve.ts`, `src/lib/files/types.ts`, `src/lib/types.ts`, `src/lib/validate/work.ts`, `src/lib/works/filter.ts`, `src/lib/works/sort.ts`, `src/pages/admin/index.astro`, `src/pages/index.astro`, `src/pages/works/[slug].astro`, `src/styles/global.css`, `test/db/adminWorks.test.ts`, `test/files/group.test.ts`, `test/files/serve.test.ts`, `test/helpers/factories.ts`, `test/lib/filter.test.ts`, `test/lib/sort.test.ts`, `test/validate/work.test.ts`. 인계 파일 `collab/HANDOFF.md`도 다시 썼다.
+- 기존 미추적 파일: `.codex-collab.lock`, `collab/RESUME.md`, `docs/`의 PDF 4개. 건드리지 않았다.
 
 ## 검증
 
-- `npx playwright test --list`: 종료 0, 3개 파일에서 16개 시험.
-- `npm test`: 종료 0, 24개 파일 134개 통과. 계획에 기록된 기존 `.text()` 경고 3건 출력.
-- `npm run check`: 종료 0, 오류·경고·힌트 각 0. 첫 실행에서는 샌드박스 밖 Wrangler 로그 경로에 EPERM 출력이 있었고, 최종 실행에서는 계획에 따라 `WRANGLER_LOG_PATH`를 임시 경로로 지정해 해결했다.
-- `npm run build`: 종료 0, `Complete!`.
-- `git diff --check`: 종료 0, LF→CRLF 안내만 출력.
-- 비밀번호 도구: 파이프 입력과 인자 입력 모두 종료 0 및 `pbkdf2:100000:` 출력; 짧은 입력은 종료 1 및 예상 오류 출력.
-- 미실행: `npm run smoke`, `npm run e2e`, 화면 사진 육안 확인, 배포 dry-run은 계획대로 Claude의 샌드박스 밖 리뷰 항목이다. 로그인·배포·원격 명령과 커밋은 실행하지 않았다.
+- `git apply --ignore-whitespace --whitespace=nowarn ...`: 종료 코드 0.
+- `npx playwright test --list`: 종료 코드 0, 4개 파일에 20개 테스트.
+- `npm test`: 종료 코드 0, 24개 파일·145개 테스트 통과. 계획에 명시된 기존 `.text()` 경고 출력.
+- `npm run check`: 종료 코드 0, 106개 파일 검사에서 오류·경고·힌트 각각 0. Wrangler 기본 로그 경로 쓰기는 EPERM 오류가 출력됐으나 명령과 진단은 성공했다.
+- `npm run build`: 종료 코드 0, `Complete!`. 기본 로그 경로 권한 문제에 대비해 이 명령에만 `WRANGLER_LOG_PATH`를 임시 경로로 지정했다.
 
-## 차이와 남은 위험
-
-- 계획 코드와 기능의 변경 사항은 없다. 코드 블록을 옮기는 과정에서 `python`이 없어 한 번 실패했고, Node 인용 오류가 한 번 발생했으며 PowerShell로 옮겼다. 두 시도 모두 파일을 변경하지 않았다.
-- 실제 브라우저 동작과 배포 환경은 아직 검증되지 않았다. 계획의 Claude 리뷰 순서에 따라 시험과 화면 확인이 필요하다.
+계획과 다른 제품 코드 변경은 없다. 계획상 TDD의 별도 실패 확인, 개발 서버, smoke, e2e, 커밋 및 배포는 실행하지 않았다. 화면과 실제 브라우저 동작은 Claude 리뷰에서 확인해야 한다. 막힌 지점이나 질문은 없다.

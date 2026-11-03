@@ -16,6 +16,18 @@ export interface WorkLink {
 
 export type TeamType = "solo" | "team";
 
+export const DEV_METHODS = ["hand", "ai"] as const;
+export type DevMethod = (typeof DEV_METHODS)[number];
+
+export const DEV_METHOD_LABELS: Record<DevMethod, string> = {
+  hand: "직접 코딩",
+  ai: "AI 협업",
+};
+
+export function isDevMethod(value: unknown): value is DevMethod {
+  return DEV_METHODS.includes(value as DevMethod);
+}
+
 export interface Work {
   id: string;
   slug: string;
@@ -34,6 +46,7 @@ export interface Work {
   teamType: TeamType | null;
   teamSize: number | null;
   role: string | null;
+  devMethod: DevMethod | null;
   isPublic: boolean;
   isFeatured: boolean;
   createdAt: string;
@@ -59,4 +72,5 @@ export interface WorkFilters {
   field: string | null;
   year: number | null;
   award: boolean;
+  method: DevMethod | null;
 }

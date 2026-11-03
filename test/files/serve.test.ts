@@ -1,12 +1,13 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { contentDisposition, serveFile } from "../../src/lib/files/serve";
+import { isViewableType, toFileView } from "../../src/lib/files/types";
 import { insertWorkRow, resetDb } from "../helpers/db";
 import { makeWorkRow } from "../helpers/factories";
 import { putCompleteFile, resetBucket } from "../helpers/files";
 
-const request = (id: string, init: { thumb?: boolean; range?: string } = {}) =>
-  new Request(`https://example.com/files/${id}/x${init.thumb ? "?v=thumb" : ""}`, {
+const request = (id: string, init: { thumb?: boolean; view?: boolean; range?: string } = {}) =>
+  new Request(`https://example.com/files/${id}/x${init.thumb ? "?v=thumb" : init.view ? "?v=view" : ""}`, {
     headers: init.range ? { Range: init.range } : {},
   });
 
@@ -64,6 +65,52 @@ describe("serveFile", () => {
     const invalid = await serveFile(env.DB, env.FILES, request(file.id, { range: "bytes=20-" }), file.id, false);
     expect(invalid.status).toBe(416);
     expect(invalid.headers.get("Content-Range")).toBe("bytes */10");
+  });
+});
+
+describe("바로 보기", () => {
+  it("PDF 첨부는 ?v=view에서 inline으로 주고, 보안 머리글은 그대로 둔다", async () => {
+    const file = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name: "대회.pdf", body: "PDF", contentType: "application/pdf" });
+    const res = await serveFile(env.DB, env.FILES, request(file.id, { view: true }), file.id, false);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Disposition")).toMatch(/^inline;/);
+    expect(res.headers.get("Content-Type")).toBe("application/pdf");
+    expect(res.headers.get("Content-Security-Policy")).toBe("default-src 'none'; sandbox");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    await res.body?.cancel();
+  });
+
+  it("허용하지 않은 형식은 ?v=view여도 내려받기로 준다", async () => {
+    for (const [name, contentType] of [["계획.hwp", "application/x-hwp"], ["a.html", "text/html"], ["a.svg", "image/svg+xml"]] as const) {
+      const file = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name, body: "x", contentType });
+      const res = await serveFile(env.DB, env.FILES, request(file.id, { view: true }), file.id, false);
+      expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
+      await res.body?.cancel();
+    }
+  });
+
+  it("주소에 ?v=view가 없으면 PDF도 내려받기로 준다", async () => {
+    const file = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name: "a.pdf", body: "PDF", contentType: "application/pdf" });
+    const res = await serveFile(env.DB, env.FILES, request(file.id), file.id, false);
+    expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/);
+    await res.body?.cancel();
+  });
+
+  it("비공개 작품의 파일은 ?v=view여도 방문자에게 404", async () => {
+    const file = await putCompleteFile(env.DB, env.FILES, { workId: "priv", kind: "attachment", name: "a.pdf", body: "PDF", contentType: "application/pdf" });
+    const res = await serveFile(env.DB, env.FILES, request(file.id, { view: true }), file.id, false);
+    expect(res.status).toBe(404);
+  });
+
+  it("보기 주소는 허용한 형식의 첨부파일에만 만든다", async () => {
+    const pdf = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name: "a.pdf", body: "x", contentType: "application/pdf" });
+    const hwp = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "attachment", name: "a.hwp", body: "x", contentType: "application/x-hwp" });
+    const cover = await putCompleteFile(env.DB, env.FILES, { workId: "pub", kind: "cover", name: "a.webp", body: "x", contentType: "image/webp" });
+    expect(toFileView(pdf).viewUrl).toBe(`/files/${pdf.id}/a.pdf?v=view`);
+    expect(toFileView(hwp).viewUrl).toBeNull();
+    expect(toFileView(cover).viewUrl).toBeNull();
+    expect(isViewableType(" Application/PDF ")).toBe(true);
+    expect(isViewableType("image/svg+xml")).toBe(false);
   });
 });
 

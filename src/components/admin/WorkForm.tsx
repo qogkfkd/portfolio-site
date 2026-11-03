@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { WorkLink } from "../../lib/types";
+import { DEV_METHOD_LABELS, type WorkLink } from "../../lib/types";
 import { charCount } from "../../lib/validate/common";
 import { LINKS_MAX, validateWorkInput, type WorkInput } from "../../lib/validate/work";
 import { SUMMARY_MAX } from "../../lib/works/summary";
@@ -147,6 +147,16 @@ export default function WorkForm({ mode, workId, initial, suggestions, savedNoti
         </Field>
         <Field id="role" label="내 역할" error={errors.role}>
           <input id="role" type="text" value={values.role} aria-invalid={invalid("role")} onChange={(e) => set("role", e.target.value)} />
+        </Field>
+        <Field id="devMethod" label="개발 방식" help="직접 코딩은 코드를 직접 짠 작품, AI 협업은 AI와 함께 구현한 작품이에요.">
+          <div className="choice-row" id="devMethod">
+            {([["", "선택 안 함"], ["hand", DEV_METHOD_LABELS.hand], ["ai", DEV_METHOD_LABELS.ai]] as const).map(([value, label]) => (
+              <label key={value}>
+                <input type="radio" name="devMethod" value={value} checked={values.devMethod === value} onChange={() => set("devMethod", value)} />
+                {label}
+              </label>
+            ))}
+          </div>
         </Field>
       </section>
 
