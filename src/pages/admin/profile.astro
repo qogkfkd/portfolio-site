@@ -1,13 +1,17 @@
 ---
 import { env } from "cloudflare:workers";
+import FileManager from "../../components/admin/FileManager";
 import ProfileForm from "../../components/admin/ProfileForm";
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import { getAvatar, storageUsage } from "../../lib/db/files";
 import { getProfile } from "../../lib/db/profile";
+import { toFileView } from "../../lib/files/types";
 import { profileToInput } from "../../lib/validate/profile";
 
-const profile = await getProfile(env.DB);
+const [profile, avatar, used] = await Promise.all([getProfile(env.DB), getAvatar(env.DB), storageUsage(env.DB)]);
 ---
 
 <AdminLayout title="자기소개" current="profile">
+  <FileManager client:only="react" mode="avatar" workId={null} initialFiles={avatar ? [toFileView(avatar)] : []} usedBytes={used} />
   <ProfileForm client:only="react" initial={profileToInput(profile)} />
 </AdminLayout>

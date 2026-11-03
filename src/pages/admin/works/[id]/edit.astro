@@ -1,15 +1,22 @@
 ---
 import { env } from "cloudflare:workers";
+import FileManager from "../../../../components/admin/FileManager";
 import WorkForm from "../../../../components/admin/WorkForm";
 import AdminLayout from "../../../../layouts/AdminLayout.astro";
 import { getWorkById, listTagSuggestions } from "../../../../lib/db/adminWorks";
+import { listWorkFiles, storageUsage } from "../../../../lib/db/files";
+import { toFileView } from "../../../../lib/files/types";
 import { workToInput } from "../../../../lib/validate/work";
 
 const work = await getWorkById(env.DB, Astro.params.id ?? "");
 if (!work) {
   return Astro.rewrite("/404");
 }
-const suggestions = await listTagSuggestions(env.DB);
+const [suggestions, files, used] = await Promise.all([
+  listTagSuggestions(env.DB),
+  listWorkFiles(env.DB, work.id),
+  storageUsage(env.DB),
+]);
 const saved = Astro.url.searchParams.get("saved") === "1";
 const workUrl = `/works/${encodeURIComponent(work.slug)}`;
 ---
@@ -28,4 +35,7 @@ const workUrl = `/works/${encodeURIComponent(work.slug)}`;
     suggestions={suggestions}
     savedNotice={saved}
   />
+  <div style="margin-top: 28px">
+    <FileManager client:only="react" mode="work" workId={work.id} initialFiles={files.map(toFileView)} usedBytes={used} />
+  </div>
 </AdminLayout>

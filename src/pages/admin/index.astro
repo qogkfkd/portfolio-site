@@ -2,17 +2,27 @@
 import { env } from "cloudflare:workers";
 import AdminLayout from "../../layouts/AdminLayout.astro";
 import { countFilesByWork, listAllWorks } from "../../lib/db/adminWorks";
+import { listCoversByWork, storageUsage } from "../../lib/db/files";
+import { usageLabel } from "../../lib/files/rules";
+import { fileUrl } from "../../lib/files/types";
+import { cleanupStaleUploads } from "../../lib/files/uploads";
 import { formatDate } from "../../lib/format";
 import { sortDateOf } from "../../lib/works/sort";
 
-const [works, fileCounts] = await Promise.all([listAllWorks(env.DB), countFilesByWork(env.DB)]);
+await cleanupStaleUploads(env.DB, env.FILES, new Date());
+const [works, fileCounts, covers, used] = await Promise.all([
+  listAllWorks(env.DB),
+  countFilesByWork(env.DB),
+  listCoversByWork(env.DB),
+  storageUsage(env.DB),
+]);
 const publicCount = works.filter((work) => work.isPublic).length;
 const deleted = Astro.url.searchParams.get("deleted") === "1";
 ---
 
 <AdminLayout title="작품" current="works">
   <div class="admin-toolbar">
-    <p class="admin-muted">작품 {works.length}개 · 공개 {publicCount}개</p>
+    <p class="admin-muted" data-usage>작품 {works.length}개 · 공개 {publicCount}개 · 저장 공간 {usageLabel(used)}</p>
     <a class="btn btn-primary" href="/admin/works/new">새 작품</a>
   </div>
   {deleted && <p class="alert alert-success" role="status">작품을 삭제했어요.</p>}
@@ -23,7 +33,11 @@ const deleted = Astro.url.searchParams.get("deleted") === "1";
       <ul class="work-list">
         {works.map((work) => (
           <li class="work-row" data-work-id={work.id}>
-            <div>
+            <div class="work-row-info">
+              <div class="work-row-thumb">
+                {covers.get(work.id) && <img src={fileUrl(covers.get(work.id)!, "thumb")} alt="" loading="lazy" />}
+              </div>
+              <div>
               <a class="work-row-title" href={`/admin/works/${work.id}/edit`}>{work.title}</a>
               <div class="work-row-meta">
                 <span class:list={["status", work.isPublic ? "status-public" : "status-private"]}>
@@ -32,6 +46,7 @@ const deleted = Astro.url.searchParams.get("deleted") === "1";
                 {work.isFeatured && <span class="status status-featured">대표작</span>}
                 <span>{formatDate(sortDateOf(work))}</span>
                 <span>{work.fields.join(", ")}</span>
+              </div>
               </div>
             </div>
             <div class="work-row-actions">
