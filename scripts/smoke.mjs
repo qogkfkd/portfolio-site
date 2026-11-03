@@ -119,6 +119,23 @@ function workBody(title, extra = {}) {
 }
 
 
+async function raw(pathname, { method = "GET", cookie, body, type, headers: extra = {} } = {}) {
+  const headers = { ...extra };
+  if (cookie) headers.Cookie = cookie;
+  if (method !== "GET") headers.Origin = base;
+  if (type) headers["Content-Type"] = type;
+  const res = await fetch(base + pathname, { method, headers, body, redirect: "manual" });
+  const html = await res.text();
+  let data = null;
+  try {
+    data = JSON.parse(html);
+  } catch {
+    // 파일 본문
+  }
+  return { status: res.status, html, data, headers: res.headers };
+}
+
+
 const query = (params) => `/?${new URLSearchParams(params).toString()}`;
 const workPath = (slug) => `/works/${encodeURIComponent(slug)}`;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -305,6 +322,84 @@ try {
     },
   });
   check("자기소개 저장 200", goodProfile.status === 200 && goodProfile.data?.name === "홍길동");
+
+
+  // ---- 3단계: 파일 ----
+  const fileWork = await request("/api/admin/works", { method: "POST", cookie, json: workBody("스모크 파일 작품") });
+  const fileWorkId = fileWork.data?.id;
+  const attachmentText = "첨부 파일 내용";
+  const startAttachment = await request("/api/admin/uploads", {
+    method: "POST",
+    cookie,
+    json: {
+      workId: fileWorkId,
+      kind: "attachment",
+      fileName: "최종 보고서.txt",
+      relativePath: "자료/최종",
+      contentType: "text/plain",
+      size: new TextEncoder().encode(attachmentText).length,
+    },
+  });
+  check("업로드 시작 201", startAttachment.status === 201 && startAttachment.data?.partSize === 10485760, JSON.stringify(startAttachment.data));
+  const attachmentId = startAttachment.data?.fileId;
+  const attachmentPart = await raw(`/api/admin/uploads/${attachmentId}/parts/1`, { method: "PUT", cookie, body: attachmentText, type: "application/octet-stream" });
+  check("조각 업로드 200", attachmentPart.status === 200 && typeof attachmentPart.data?.etag === "string", JSON.stringify(attachmentPart.data));
+  const attachmentDone = await request(`/api/admin/uploads/${attachmentId}/complete`, { method: "POST", cookie, json: { parts: [attachmentPart.data] } });
+  const attachmentUrl = attachmentDone.data?.file?.url ?? "/none";
+  check(
+    "업로드 완료와 파일 주소",
+    attachmentDone.status === 200 && attachmentUrl === `/files/${attachmentId}/${encodeURIComponent("최종 보고서.txt")}`,
+    JSON.stringify(attachmentDone.data),
+  );
+  check("비공개 작품의 파일은 방문자에게 404", (await raw(attachmentUrl)).status === 404);
+  await request(`/api/admin/works/${fileWorkId}/flags`, { method: "POST", cookie, form: { isPublic: "1" } });
+  const downloaded = await raw(attachmentUrl);
+  check(
+    "공개 후 내려받기와 한글 파일명",
+    downloaded.status === 200 &&
+      downloaded.html === attachmentText &&
+      (downloaded.headers.get("content-disposition") ?? "").startsWith("attachment;") &&
+      (downloaded.headers.get("content-disposition") ?? "").includes("filename*=UTF-8''%EC%B5%9C%EC%A2%85"),
+    String(downloaded.headers.get("content-disposition")),
+  );
+  const ranged = await raw(attachmentUrl, { headers: { Range: "bytes=0-2" } });
+  check("Range 요청 206", ranged.status === 206 && ranged.headers.get("content-range") === "bytes 0-2/20", `${ranged.status} ${ranged.headers.get("content-range")}`);
+
+  const startImage = await request("/api/admin/uploads", {
+    method: "POST",
+    cookie,
+    json: { workId: fileWorkId, kind: "gallery", fileName: "화면.webp", relativePath: "", contentType: "image/webp", size: 17 },
+  });
+  const imageId = startImage.data?.fileId;
+  const imagePart = await raw(`/api/admin/uploads/${imageId}/parts/1`, { method: "PUT", cookie, body: "IMG-MAIN", type: "application/octet-stream" });
+  const imageThumb = await raw(`/api/admin/uploads/${imageId}/thumb`, { method: "PUT", cookie, body: "IMG-THUMB", type: "image/webp" });
+  const imageDone = await request(`/api/admin/uploads/${imageId}/complete`, { method: "POST", cookie, json: { parts: [imagePart.data] } });
+  check("이미지와 썸네일 업로드", imageThumb.status === 200 && imageDone.status === 200 && Boolean(imageDone.data?.file?.thumbUrl), JSON.stringify(imageDone.data));
+  const thumbGet = await raw(imageDone.data?.file?.thumbUrl ?? "/none");
+  check("썸네일 주소는 썸네일을 준다", thumbGet.status === 200 && thumbGet.html === "IMG-THUMB");
+  const svg = await request("/api/admin/uploads", {
+    method: "POST",
+    cookie,
+    json: { workId: fileWorkId, kind: "gallery", fileName: "x.svg", contentType: "image/svg+xml", size: 10 },
+  });
+  check("svg 이미지는 거절", svg.status === 400 && svg.data?.errors?.file === "jpg, png, webp, gif 이미지만 올릴 수 있어요.");
+  const tooBig = await request("/api/admin/uploads", {
+    method: "POST",
+    cookie,
+    json: { workId: fileWorkId, kind: "attachment", fileName: "big.zip", contentType: "application/zip", size: 1_000_000_001 },
+  });
+  check("1GB 넘는 파일은 거절", tooBig.status === 400 && tooBig.data?.errors?.file === "파일이 너무 커요. 1GB까지 올릴 수 있어요.");
+  const fileDetail = await raw(workPath("스모크-파일-작품"));
+  check(
+    "상세 페이지에 스크린샷과 폴더별 첨부",
+    fileDetail.status === 200 && fileDetail.html.includes("스크린샷") && fileDetail.html.includes("자료/최종") && fileDetail.html.includes("최종 보고서.txt"),
+  );
+  const usageList = await raw("/admin", { cookie });
+  check("관리자 목록에 저장 공간 표시", /저장 공간 10GB 중 \d+\.\d{2}GB 사용/.test(usageList.html));
+  const removedFile = await request(`/api/admin/files/${attachmentId}/delete`, { method: "POST", cookie });
+  check("파일 하나 지우기", removedFile.status === 200 && (await raw(attachmentUrl)).status === 404);
+  await request(`/api/admin/works/${fileWorkId}/delete`, { method: "POST", cookie });
+  check("작품을 지우면 그 파일도 404", (await raw(imageDone.data?.file?.url ?? "/none")).status === 404);
 
   const robots = await request("/robots.txt");
   check("robots.txt가 /admin을 막는다", robots.status === 200 && robots.html.includes("Disallow: /admin"));
