@@ -20,6 +20,7 @@
 - **바꿔도 되는 파일:** `src/components/WorkCard.astro`, `collab/HANDOFF.md`. 이 목록 밖은 건드리지 않는다.
 - **하지 않는 것:** `git add`, `git commit`, `git push`, `npm install`, `npm run dev`, `npm run smoke`, `wrangler login`, `wrangler deploy`, `--remote`. 다른 스타일이나 리팩터링도 하지 않는다.
 - 저장소 밖 기본 경로에 쓸 수 없으면, 그 명령에서만 `npm_config_cache`와 `WRANGLER_LOG_PATH`를 임시 폴더로 지정한다.
+- **잠금 파일:** `.codex-collab.lock`은 Claude가 이 Codex 실행을 위해 잡아 둔 잠금이다. 있는 것이 정상이고, 독점 상태라 읽을 수 없는 것도 정상이다. 다른 작성자는 없으니 잠금을 이유로 멈추지 말고, 읽거나 건드리지도 말고 진행한다.
 
 ## Task 1: `.cover`가 넘치는 부분을 자르게 한다
 
